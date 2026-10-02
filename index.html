@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trazzo · Centro de Control</title>
+  <meta name="description" content="Trazzo: emprendimiento de tecnología logística. Centro de control web para registrar, asignar y monitorear rutas de carga desde el navegador, la pantalla del patio y el reloj del operador.">
+  <meta name="author" content="Iván Arcos">
+  <meta name="theme-color" content="#12306b">
+
+  <!-- Iconos y PWA -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Trazzo">
+
+  <!-- Tipografías: Inter (texto) y JetBrains Mono (folios y cifras) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+  <!-- Iconos reutilizables (se usan con <use href="#i-...">) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" /></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="5" r="2.5" /><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5" /></g></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12v11H2zM14 9h4l4 4v3h-8" /><circle cx="6.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></g></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6" /></g></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4M6 13l3-3 3 2 5-5" /></g></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14" /></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3" /></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7" /></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></g></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></g></symbol>
+    <symbol id="i-watch" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="3" /><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3M12 9.5V12l1.5 1" /></g></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2" /><path d="m8 2 4 4 4-4" /></g></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></g></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5M9 8h6" /></g></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></g></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16" /></symbol>
+    <symbol id="i-logo" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#12306b" /><path d="M120 150h272v58H286v184h-60V208H120z" fill="#fff" /><path d="M312 300h80l-40 70z" fill="#ff8a1f" /></symbol>
+  </svg>
+
+  <!-- ===================== ENCABEZADO Y MENÚ ===================== -->
+  <header class="nav" id="nav">
+    <a class="brand" href="#tablero" aria-label="Trazzo, ir al tablero"><svg aria-hidden="true"><use href="#i-logo" /></svg><span>TRAZZO<small>CONTROL</small></span></a>
+
+    <nav class="nav__links" id="menu" aria-label="Principal">
+      <a href="#tablero"><svg class="i" aria-hidden="true"><use href="#i-home" /></svg>Tablero</a>
+      <a href="#ruta"><svg class="i" aria-hidden="true"><use href="#i-route" /></svg>Nueva ruta</a>
+      <a href="#asignar"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Asignación<em aria-label="4 pendientes">4</em></a>
+      <a href="#monitoreo"><svg class="i" aria-hidden="true"><use href="#i-monitor" /></svg>Monitoreo</a>
+      <a href="#personal"><svg class="i" aria-hidden="true"><use href="#i-users" /></svg>Personal y roles</a>
+      <a href="#guia"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg>Cómo funciona</a>
+    </nav>
+
+    <div class="nav__tools">
+      <label class="search"><svg class="i" aria-hidden="true"><use href="#i-search" /></svg><input type="search" id="buscar" placeholder="Buscar folio, ciudad…" aria-label="Buscar viajes por folio, ciudad u operador"><span class="kbd">Ctrl K</span></label>
+      <span class="clock"><span class="live"></span><time id="reloj">—</time></span>
+      <div class="nav__user">
+        <span class="av" aria-hidden="true">IA</span>
+        <div><b>Iván Arcos</b><small>Administrador</small></div>
+        <a href="#login" aria-label="Cerrar sesión" class="muted"><svg class="i" aria-hidden="true"><use href="#i-logout" /></svg></a>
+      </div>
+      <button class="nav__toggle" type="button" aria-controls="menu" aria-expanded="false" aria-label="Abrir menú"><svg class="i" aria-hidden="true"><use href="#i-menu" /></svg></button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- ===================== TABLERO ===================== -->
+    <section class="screen" id="tablero" aria-labelledby="t-tablero">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Resumen del día</p>
+            <h1 id="t-tablero">Tablero de operación</h1>
+          </div>
+          <div class="bar__actions">
+            <a href="#monitoreo" class="btn btn--ghost"><svg class="i" aria-hidden="true"><use href="#i-tv" /></svg>Modo TV</a>
+            <a href="#ruta" class="btn btn--accent"><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Nueva ruta</a>
+          </div>
+        </header>
+
+        <div class="kpis">
+          <article class="kpi"><small>Viajes activos</small><b>12</b><em class="up">▲ 3 vs. ayer</em><svg class="spark" viewBox="0 0 110 36" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2" points="0,30 15,26 30,28 45,18 60,20 75,12 90,14 110,4" /></svg></article>
+          <article class="kpi"><small>Por asignar</small><b class="c-amber">04</b><em>Requieren operador</em></article>
+          <article class="kpi"><small>Entregas hoy</small><b class="c-green">07</b><em class="up">98 % a tiempo</em><svg class="spark" viewBox="0 0 110 36" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2" points="0,24 15,22 30,26 45,14 60,16 75,10 90,12 110,8" /></svg></article>
+          <article class="kpi"><small>Flete del mes</small><b>$1.28 M</b><em>MXN facturados</em></article>
+        </div>
+
+        <div class="grid-main">
+          <div class="col">
+            <article class="panel">
+              <header class="panel__head"><h2>Mapa de unidades</h2><span class="muted">5 unidades con GPS</span></header>
+              <div class="map map--wide" role="img" aria-label="Mapa esquemático con la posición de cinco unidades">
+                <svg viewBox="0 0 160 70" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M20 55 C 45 40, 60 50, 80 30 S 120 20, 145 12" fill="none" stroke="currentColor" stroke-width=".6" stroke-dasharray="2 2" />
+                  <path class="p-go" d="M30 15 C 50 25, 70 20, 95 50" fill="none" stroke-width=".6" stroke-dasharray="2 2" style="fill:none" />
+                  <circle cx="80" cy="30" r="2.4" fill="currentColor" />
+                  <circle class="p-go" cx="62" cy="24" r="2.4" />
+                  <circle class="p-alert" cx="120" cy="20" r="2.4" />
+                  <circle class="p-go" cx="40" cy="48" r="2.4" />
+                  <circle class="p-done" cx="145" cy="12" r="2.4" />
+                </svg>
+              </div>
+            </article>
+
+            <article class="panel">
+              <header class="panel__head"><h2>Viajes en curso</h2><a href="#monitoreo">Ver todo →</a></header>
+              <div class="table-wrap">
+                <table class="table" id="tabla-viajes">
+                  <thead><tr><th>Folio</th><th>Ruta</th><th>Operador</th><th>Unidad</th><th>Avance</th><th>ETA</th><th>Estado</th></tr></thead>
+                  <tbody>
+                    <tr><td class="mono">TRZ-0142</td><td>Puebla → CDMX</td><td>J. Pérez</td><td class="mono">PUE-45-8K</td><td><div class="bar-p" style="--p:62%" role="img" aria-label="62 %"></div></td><td>15:40</td><td><span class="st st--go">En ruta</span></td></tr>
+                    <tr><td class="mono">TRZ-0141</td><td>Tlaxcala → Toluca</td><td>R. Sánchez</td><td class="mono">TLX-20-4R</td><td><div class="bar-p" style="--p:35%" role="img" aria-label="35 %"></div></td><td>17:05</td><td><span class="st st--go">En ruta</span></td></tr>
+                    <tr><td class="mono">TRZ-0140</td><td>Veracruz → Monterrey</td><td>—</td><td>—</td><td><div class="bar-p" style="--p:0%" role="img" aria-label="0 %"></div></td><td>—</td><td><span class="st st--wait">Pendiente</span></td></tr>
+                    <tr><td class="mono">TRZ-0138</td><td>León → Tijuana</td><td>A. Ruiz</td><td class="mono">GTO-88-1P</td><td><div class="bar-p" style="--p:81%" role="img" aria-label="81 %"></div></td><td>+40 min</td><td><span class="st st--alert">Retraso</span></td></tr>
+                    <tr><td class="mono">TRZ-0139</td><td>Querétaro → Guadalajara</td><td>L. Méndez</td><td class="mono">QRO-12-3M</td><td><div class="bar-p" style="--p:100%" role="img" aria-label="100 %"></div></td><td>09:12</td><td><span class="st st--done">Entregado</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+
+          <div class="col">
+            <article class="panel">
+              <header class="panel__head"><h2>Alertas</h2><span class="badge">3</span></header>
+              <ul class="feed">
+                <li class="alert"><b>TRZ-0138 con 40 min de retraso</b><small>Caseta Querétaro · hace 5 min</small></li>
+                <li class="wait"><b>TRZ-0140 sin operador asignado</b><small>Salida programada a las 13:00</small></li>
+                <li><b>J. Pérez confirmó la carga desde su reloj</b><small>TRZ-0142 · hace 22 min</small></li>
+                <li><b>La póliza GNP-7781 vence en 12 días</b><small>Unidad PUE-45-8K</small></li>
+              </ul>
+            </article>
+            <article class="panel">
+              <header class="panel__head"><h2>Flota</h2></header>
+              <div class="fleet">
+                <div><b class="c-green">14</b><small>Disponibles</small></div>
+                <div><b class="c-accent">12</b><small>En ruta</small></div>
+                <div><b>03</b><small>En taller</small></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== NUEVA RUTA ===================== -->
+    <section class="screen" id="ruta" aria-labelledby="t-ruta">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Folio generado · <span class="mono c-accent">TRZ-0143</span></p>
+            <h1 id="t-ruta">Registrar nueva ruta</h1>
+          </div>
+        </header>
+
+        <div class="grid-form">
+          <form class="panel form" id="form-ruta" novalidate>
+            <h2 class="form__h"><span>01</span>Ruta</h2>
+            <div class="cols">
+              <label class="f"><span>Origen</span><input name="origen" required placeholder="Ciudad o dirección de carga" value="Parque Industrial FINSA, Puebla"></label>
+              <label class="f"><span>Destino</span><input name="destino" required placeholder="Ciudad o dirección de entrega"></label>
+              <label class="f"><span>GPS de origen (opcional)</span><input name="gpsOrigen" type="url" placeholder="https://maps.app.goo.gl/…"></label>
+              <label class="f"><span>GPS de destino (opcional)</span><input name="gpsDestino" type="url" placeholder="https://maps.app.goo.gl/…"></label>
+            </div>
+
+            <div class="sep"></div>
+            <h2 class="form__h"><span>02</span>Mercancía</h2>
+            <label class="f"><span>Descripción de la mercancía</span><textarea name="mercancia" rows="3" required placeholder="Ej. 24 tarimas de café tostado, no apilable"></textarea></label>
+            <div class="cols cols--3">
+              <label class="f"><span>Peso (kg)</span><input name="peso" type="number" min="1" required placeholder="0"></label>
+              <label class="f"><span>Número de unidades</span><input name="unidades" type="number" min="1" value="1" required></label>
+              <label class="f"><span>Flete (MXN)</span><input name="flete" type="number" min="0" step="0.01" placeholder="0.00"></label>
+            </div>
+
+            <div class="sep"></div>
+            <h2 class="form__h"><span>03</span>Cliente</h2>
+            <div class="cols">
+              <label class="f"><span>Cliente</span><select name="cliente"><option>Logística del Golfo, S. A.</option><option>Cafés de Veracruz</option></select></label>
+              <label class="f"><span>Fecha y hora de salida</span><input name="salida" type="datetime-local" required></label>
+            </div>
+
+            <div class="actions">
+              <a href="#tablero" class="btn btn--ghost">Cancelar</a>
+              <button type="submit" class="btn btn--accent">Guardar y asignar →</button>
+            </div>
+          </form>
+
+          <aside class="sticky">
+            <div class="panel">
+              <header class="panel__head"><h2>Vista previa de la ruta</h2></header>
+              <div class="map map--card" role="img" aria-label="Trazo esquemático de origen a destino">
+                <svg viewBox="0 0 100 75" preserveAspectRatio="none" aria-hidden="true">
+                  <path d="M15 60 C 35 15, 60 65, 85 18" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" />
+                  <circle class="p-go" cx="15" cy="60" r="4" />
+                  <circle cx="85" cy="18" r="4" fill="currentColor" />
+                </svg>
+              </div>
+            </div>
+            <div class="panel">
+              <dl class="kv">
+                <div><dt>Ruta</dt><dd id="pv-ruta">Puebla → —</dd></div>
+                <div><dt>Distancia estimada</dt><dd>134 km</dd></div>
+                <div><dt>Tiempo estimado</dt><dd>2 h 10 min</dd></div>
+                <div><dt>Capturó</dt><dd>Daniel B.</dd></div>
+                <div><dt>Estado</dt><dd><span class="st st--wait">Borrador</span></dd></div>
+              </dl>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== ASIGNACIÓN ===================== -->
+    <section class="screen" id="asignar" aria-labelledby="t-asignar">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Folio <span class="mono c-accent">TRZ-0143</span> · Puebla → CDMX</p>
+            <h1 id="t-asignar">Asignar operador y unidad</h1>
+          </div>
+        </header>
+
+        <div class="grid-form">
+          <div class="col">
+            <article class="panel">
+              <header class="panel__head"><h2>Operadores</h2><span class="muted">3 disponibles de 18</span></header>
+              <div class="pick">
+                <label><input type="radio" name="op" value="Juan Pérez" checked><span class="av">JP</span><span><b>Juan Pérez</b><small>Licencia federal B · 4 viajes este mes</small></span><span class="muted">4.9 ★</span><span class="st st--go">Libre</span></label>
+                <label><input type="radio" name="op" value="Laura Méndez"><span class="av">LM</span><span><b>Laura Méndez</b><small>Licencia federal E · 6 viajes este mes</small></span><span class="muted">4.8 ★</span><span class="st st--go">Libre</span></label>
+                <label><input type="radio" name="op" value="Raúl Sánchez"><span class="av">RS</span><span><b>Raúl Sánchez</b><small>Licencia federal B · en TRZ-0141</small></span><span class="muted">4.6 ★</span><span class="st st--wait">14:00</span></label>
+              </div>
+            </article>
+
+            <article class="panel form">
+              <header class="panel__head"><h2>Unidad</h2></header>
+              <div class="cols">
+                <label class="f"><span>Marca y modelo</span><select><option>Kenworth T680</option><option>Freightliner Cascadia</option><option>International LT</option></select></label>
+                <label class="f"><span>Año</span><input value="2022" inputmode="numeric"></label>
+                <label class="f"><span>Placas</span><input value="PUE-45-8K" class="mono"></label>
+                <label class="f"><span>Peso bruto vehicular</span><input value="36,000 kg"></label>
+              </div>
+              <label class="f"><span>Póliza de seguro</span><input value="GNP-7781-2026" class="mono"></label>
+              <div class="actions">
+                <a href="#ruta" class="btn btn--ghost">← Atrás</a>
+                <a href="#monitoreo" class="btn btn--accent" id="confirmar-viaje"><svg class="i" aria-hidden="true"><use href="#i-check" /></svg>Confirmar viaje</a>
+              </div>
+            </article>
+          </div>
+
+          <aside class="panel sticky">
+            <header class="panel__head"><h2>Resumen del viaje</h2></header>
+            <dl class="kv">
+              <div><dt>Origen</dt><dd>Parque FINSA, Puebla</dd></div>
+              <div><dt>Destino</dt><dd>Azcapotzalco, CDMX</dd></div>
+              <div><dt>Mercancía</dt><dd>24 tarimas de café</dd></div>
+              <div><dt>Peso</dt><dd>18,000 kg</dd></div>
+              <div><dt>Flete</dt><dd class="c-accent">$28,400 MXN</dd></div>
+              <div><dt>Operador</dt><dd id="res-operador">Juan Pérez</dd></div>
+              <div><dt>Notificación</dt><dd>Reloj Wear OS del operador</dd></div>
+            </dl>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== MONITOREO ===================== -->
+    <section class="screen" id="monitoreo" aria-labelledby="t-monitoreo">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow"><span class="live"></span>Actualización en tiempo real</p>
+            <h1 id="t-monitoreo">Monitoreo de viajes</h1>
+          </div>
+          <div class="seg" role="group" aria-label="Filtrar viajes por estado">
+            <button type="button" data-filtro="todos" aria-pressed="true">Todos</button>
+            <button type="button" data-filtro="go" aria-pressed="false">En ruta</button>
+            <button type="button" data-filtro="wait" aria-pressed="false">Pendientes</button>
+            <button type="button" data-filtro="alert" aria-pressed="false">Retrasos</button>
+            <button type="button" data-filtro="done" aria-pressed="false">Entregados</button>
+          </div>
+        </header>
+
+        <div class="board" id="tablero-viajes">
+          <article class="tcard tcard--go" data-estado="go"><header><span class="mono">TRZ-0142</span><span class="st st--go">En ruta</span></header><h3>Puebla <i>→</i> CDMX</h3><div class="track"><span style="--p:62%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>J. Pérez</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>ETA 15:40</span></footer></article>
+          <article class="tcard tcard--alert" data-estado="alert"><header><span class="mono">TRZ-0138</span><span class="st st--alert">Retraso</span></header><h3>León <i>→</i> Tijuana</h3><div class="track"><span style="--p:81%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>A. Ruiz</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>+40 min</span></footer></article>
+          <article class="tcard tcard--go" data-estado="go"><header><span class="mono">TRZ-0141</span><span class="st st--go">En ruta</span></header><h3>Tlaxcala <i>→</i> Toluca</h3><div class="track"><span style="--p:35%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>R. Sánchez</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>ETA 17:05</span></footer></article>
+          <article class="tcard tcard--wait" data-estado="wait"><header><span class="mono">TRZ-0140</span><span class="st st--wait">Pendiente</span></header><h3>Veracruz <i>→</i> Monterrey</h3><div class="track"><span style="--p:0%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>Sin asignar</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>Sale 13:00</span></footer></article>
+          <article class="tcard tcard--go" data-estado="go"><header><span class="mono">TRZ-0143</span><span class="st st--go">Cargando</span></header><h3>Puebla <i>→</i> CDMX</h3><div class="track"><span style="--p:5%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>J. Pérez</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>Sale 13:00</span></footer></article>
+          <article class="tcard tcard--done" data-estado="done"><header><span class="mono">TRZ-0139</span><span class="st st--done">Entregado</span></header><h3>Querétaro <i>→</i> Guadalajara</h3><div class="track"><span style="--p:100%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>L. Méndez</span><span><svg class="i" aria-hidden="true"><use href="#i-check" /></svg>09:12</span></footer></article>
+        </div>
+        <p class="empty" id="sin-resultados" hidden>No hay viajes que coincidan con el filtro.</p>
+      </div>
+    </section>
+
+    <!-- ===================== PERSONAL Y ROLES ===================== -->
+    <section class="screen" id="personal" aria-labelledby="t-personal">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Control de acceso</p>
+            <h1 id="t-personal">Personal y roles</h1>
+          </div>
+          <button type="button" class="btn btn--accent" data-aviso="Formulario de registro disponible en la siguiente versión."><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Registrar usuario</button>
+        </header>
+
+        <div class="kpis">
+          <article class="kpi"><small>Administradores</small><b>2</b></article>
+          <article class="kpi"><small>Capturistas</small><b>5</b></article>
+          <article class="kpi"><small>Operadores</small><b>18</b></article>
+          <article class="kpi"><small>Clientes</small><b>9</b></article>
+        </div>
+
+        <div class="grid-main">
+          <article class="panel">
+            <header class="panel__head"><h2>Usuarios</h2><span class="muted">34 registrados</span></header>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Dispositivos</th><th>Estado</th></tr></thead>
+                <tbody>
+                  <tr><td><b>Iván Arcos</b></td><td class="muted">ivan@trazzo.mx</td><td><span class="role role--admin">Administrador</span></td><td>Web · TV</td><td><span class="st st--go">Activo</span></td></tr>
+                  <tr><td><b>Miriam González</b></td><td class="muted">miriam@trazzo.mx</td><td><span class="role role--admin">Administradora</span></td><td>Web · TV</td><td><span class="st st--go">Activo</span></td></tr>
+                  <tr><td><b>Daniel Barrios</b></td><td class="muted">daniel@trazzo.mx</td><td><span class="role role--cap">Capturista</span></td><td>Web</td><td><span class="st st--go">Activo</span></td></tr>
+                  <tr><td><b>Juan Pérez</b></td><td class="muted">juan.perez@trazzo.mx</td><td><span class="role role--op">Operador</span></td><td>Móvil · Wear OS</td><td><span class="st st--go">En ruta</span></td></tr>
+                  <tr><td><b>Laura Méndez</b></td><td class="muted">laura@trazzo.mx</td><td><span class="role role--op">Operadora</span></td><td>Móvil · Wear OS</td><td><span class="st st--go">Activo</span></td></tr>
+                  <tr><td><b>Rocío Herrera</b></td><td class="muted">rherrera@golfo.com</td><td><span class="role role--cli">Cliente</span></td><td>Web</td><td><span class="st st--done">Inactivo</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <header class="panel__head"><h2>Permisos por rol</h2></header>
+            <div class="perm" role="table" aria-label="Permisos por rol">
+              <span class="h">Módulo</span><span class="h" title="Administrador">Adm</span><span class="h" title="Capturista">Cap</span><span class="h" title="Operador">Op</span><span class="h" title="Cliente">Cli</span>
+              <span>Registrar rutas</span><span class="y">●</span><span class="y">●</span><span class="n">●</span><span class="n">●</span>
+              <span>Asignar operador</span><span class="y">●</span><span class="y">●</span><span class="n">●</span><span class="n">●</span>
+              <span>Monitoreo</span><span class="y">●</span><span class="y">●</span><span class="y">●</span><span class="y">●</span>
+              <span>Personal y roles</span><span class="y">●</span><span class="n">●</span><span class="n">●</span><span class="n">●</span>
+              <span>Configuración</span><span class="y">●</span><span class="n">●</span><span class="n">●</span><span class="n">●</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== CÓMO FUNCIONA (texto, imagen y video) ===================== -->
+    <section class="screen" id="guia" aria-labelledby="t-guia">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Guía de uso</p>
+            <h1 id="t-guia">Cómo funciona Trazzo</h1>
+          </div>
+          <a href="#ruta" class="btn btn--accent"><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Registrar mi primera ruta</a>
+        </header>
+
+        <div class="guide">
+          <!-- Texto + imagen -->
+          <article class="panel guide__intro">
+            <div class="prose">
+              <h2>Un solo lugar para cada viaje de carga</h2>
+              <p class="lead">Trazzo es un emprendimiento poblano de tecnología logística. Su aplicación web conecta la oficina, el patio de carga y la cabina del camión: lo que se registra en el navegador aparece al instante en la pantalla del patio y en el reloj del operador.</p>
+              <p>El <strong>capturista</strong> da de alta la ruta con origen, destino, mercancía y cliente. El sistema genera un folio y la deja lista para asignar.</p>
+              <p>El <strong>administrador</strong> elige al operador y la unidad según disponibilidad, licencia y póliza vigente. Al confirmar, el operador recibe el aviso en su reloj y la pantalla del patio indica en qué andén cargar.</p>
+            </div>
+            <figure class="media">
+              <img src="img/patio-carga.svg" width="800" height="500" loading="lazy"
+                alt="Ilustración de un patio de carga con tres andenes, un camión de Trazzo estacionado y un reloj inteligente que muestra el aviso «Carga lista» del folio TRZ-0143.">
+              <figcaption>Patio 1: la pantalla indica el andén y el reloj del operador confirma cuando la carga está lista.</figcaption>
+            </figure>
+          </article>
+
+          <!-- Propuesta de valor del emprendimiento -->
+          <article class="panel">
+            <header class="panel__head"><h2>Por qué nace Trazzo</h2></header>
+            <div class="value">
+              <article style="--c: var(--alert)">
+                <span class="tag">Problema</span>
+                <h3>Viajes coordinados por teléfono</h3>
+                <p>Las transportistas pequeñas registran sus viajes en hojas de cálculo y mensajes. La información se pierde y el cliente no sabe dónde está su carga.</p>
+              </article>
+              <article style="--c: var(--accent)">
+                <span class="tag">Solución</span>
+                <h3>Un centro de control compartido</h3>
+                <p>Una aplicación web que funciona en cualquier navegador y se instala como app. No requiere servidores propios ni equipo especializado.</p>
+              </article>
+              <article style="--c: var(--go)">
+                <span class="tag">Impacto</span>
+                <h3>Menos llamadas, entregas a tiempo</h3>
+                <p>Despacho, operadores y clientes consultan el mismo dato. Los retrasos se detectan en minutos, no al final del día.</p>
+              </article>
+            </div>
+          </article>
+
+          <article class="panel">
+            <header class="panel__head"><h2>El recorrido de un viaje</h2></header>
+            <ol class="flow">
+              <li><b>Registrar la ruta</b><p>Captura origen, destino, mercancía, peso y flete. Trazzo asigna el folio.</p></li>
+              <li><b>Asignar operador y unidad</b><p>Solo aparecen operadores libres y unidades con seguro vigente.</p></li>
+              <li><b>Notificar al reloj</b><p>El operador acepta el viaje y confirma la carga desde su reloj Wear OS.</p></li>
+              <li><b>Seguir hasta la entrega</b><p>El GPS actualiza el avance y la hora de llegada; los retrasos generan una alerta en el tablero.</p></li>
+            </ol>
+          </article>
+
+          <!-- Video + texto -->
+          <article class="panel guide__video">
+            <figure class="media">
+              <video controls muted loop playsinline preload="metadata" poster="img/seguimiento-poster.jpg" width="960" height="540"
+                aria-label="Animación del viaje TRZ-0142 avanzando de Puebla a la Ciudad de México">
+                <source src="video/seguimiento-trz-0142.mp4" type="video/mp4">
+                Tu navegador no puede reproducir este video.
+              </video>
+              <figcaption>Video: seguimiento del viaje TRZ-0142, del Parque FINSA en Puebla a Azcapotzalco, CDMX.</figcaption>
+            </figure>
+            <div class="prose">
+              <h2>Seguimiento en vivo</h2>
+              <p>Cada unidad reporta su posición cada minuto. La barra de avance y la hora estimada de llegada se recalculan con cada reporte, así que el cliente ve el mismo dato que el despacho.</p>
+              <p>Si una unidad se detiene más de 15 minutos fuera de una caseta o parada programada, el viaje cambia a <strong>Retraso</strong> y aparece en la lista de alertas.</p>
+              <a href="#monitoreo" class="btn btn--ghost"><svg class="i" aria-hidden="true"><use href="#i-monitor" /></svg>Abrir monitoreo</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== PIE DE PÁGINA ===================== -->
+  <footer class="foot">
+    <div class="foot__grid">
+      <div class="foot__about">
+        <a class="brand" href="#tablero"><svg aria-hidden="true"><use href="#i-logo" /></svg><span>TRAZZO<small>CONTROL</small></span></a>
+        <p>Centro de control para rutas de carga. Registra, asigna y sigue cada viaje desde el navegador, la pantalla del patio y el reloj del operador.</p>
+      </div>
+      <nav aria-label="Operación">
+        <h2>Operación</h2>
+        <ul>
+          <li><a href="#tablero">Tablero</a></li>
+          <li><a href="#ruta">Nueva ruta</a></li>
+          <li><a href="#asignar">Asignación</a></li>
+          <li><a href="#monitoreo">Monitoreo</a></li>
+          <li><a href="#personal">Personal y roles</a></li>
+          <li><a href="#guia">Cómo funciona</a></li>
+        </ul>
+      </nav>
+      <div>
+        <h2>Dispositivos</h2>
+        <ul>
+          <li class="dev"><svg class="i" aria-hidden="true"><use href="#i-phone" /></svg>App web y móvil<span class="dot" title="En línea"></span></li>
+          <li class="dev"><svg class="i" aria-hidden="true"><use href="#i-tv" /></svg>Pantalla TV · Patio 1<span class="dot" title="En línea"></span></li>
+          <li class="dev"><svg class="i" aria-hidden="true"><use href="#i-watch" /></svg>14 relojes Wear OS<span class="dot" title="En línea"></span></li>
+          <li class="dev"><svg class="i" aria-hidden="true"><use href="#i-tv" /></svg>Pantalla TV · Patio 2<span class="dot dot--off" title="Sin conexión"></span></li>
+        </ul>
+      </div>
+      <div>
+        <h2>Soporte</h2>
+        <address>
+          <span>Parque Industrial FINSA, Puebla, Pue.</span>
+          <a href="mailto:soporte@trazzo.mx">soporte@trazzo.mx</a>
+          <a href="tel:+522221234567">222 123 4567</a>
+          <span>Lunes a sábado, de 7:00 a 21:00</span>
+        </address>
+      </div>
+    </div>
+    <div class="foot__base">
+      <span>© <span id="anio">2026</span> Trazzo · Versión 2.1 · Proyecto escolar de emprendimiento</span>
+      <span><span class="dot"></span>Aplicación web instalable (PWA)</span>
+    </div>
+  </footer>
+
+  <!-- ===================== ACCESO (vista inicial) ===================== -->
+  <section class="login" id="login" aria-labelledby="t-login">
+    <div class="login__art" aria-hidden="true">
+      <div class="grid-lines"></div>
+      <p class="login__tag">Cada viaje, a la vista:<br><span>navegador · pantalla del patio · reloj</span></p>
+    </div>
+    <form class="login__form" id="form-login" novalidate>
+      <a class="brand" href="#login"><svg aria-hidden="true"><use href="#i-logo" /></svg><span>TRAZZO<small>CONTROL</small></span></a>
+      <h1 id="t-login">Acceso al centro de control</h1>
+      <label class="f"><span>Correo electrónico</span><input name="correo" type="email" required placeholder="usuario@trazzo.mx" autocomplete="username"></label>
+      <label class="f"><span>Contraseña</span><input name="clave" type="password" required minlength="6" placeholder="••••••••" autocomplete="current-password"></label>
+      <button type="submit" class="btn btn--accent btn--block">Entrar</button>
+      <p class="muted login__note">Demostración: escribe cualquier correo y una contraseña de 6 caracteres o más.</p>
+    </form>
+  </section>
+
+  <!-- Aviso flotante -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <!-- ===================== JAVASCRIPT ===================== -->
+  <script>
+    /* ==========================================================
+       TRAZZO · Centro de Control — comportamiento de la interfaz
+       Cada función atiende una sola parte de la página y se
+       inicializa al final del archivo.
+       ========================================================== */
+    'use strict';
+
+    const $ = (sel, raiz = document) => raiz.querySelector(sel);
+    const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
+
+    /* ---------- Aviso flotante (toast) ---------- */
+    let temporizadorAviso;
+
+    function mostrarAviso(texto) {
+      const toast = $('#toast');
+      if (!toast) return;
+      toast.textContent = texto;
+      toast.classList.add('is-on');
+      clearTimeout(temporizadorAviso);
+      temporizadorAviso = setTimeout(() => toast.classList.remove('is-on'), 3200);
+    }
+
+    /* ---------- Navegación: enlace activo y menú móvil ---------- */
+    function marcarEnlaceActivo() {
+      const actual = location.hash || '#login';
+      $$('.nav__links a').forEach((a) => {
+        if (a.getAttribute('href') === actual) a.setAttribute('aria-current', 'page');
+        else a.removeAttribute('aria-current');
+      });
+    }
+
+    function iniciarMenu() {
+      const nav = $('#nav');
+      const boton = $('.nav__toggle');
+      if (!nav || !boton) return;
+
+      const cerrar = () => {
+        nav.classList.remove('is-open');
+        boton.setAttribute('aria-expanded', 'false');
+        boton.setAttribute('aria-label', 'Abrir menú');
+      };
+
+      boton.addEventListener('click', () => {
+        const abierto = nav.classList.toggle('is-open');
+        boton.setAttribute('aria-expanded', String(abierto));
+        boton.setAttribute('aria-label', abierto ? 'Cerrar menú' : 'Abrir menú');
+      });
+
+      // Al elegir una sección, el menú se cierra
+      $$('.nav__links a').forEach((a) => a.addEventListener('click', cerrar));
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrar(); });
+
+      window.addEventListener('hashchange', marcarEnlaceActivo);
+      marcarEnlaceActivo();
+    }
+
+    /* ---------- Reloj en vivo del encabezado ---------- */
+    function iniciarReloj() {
+      const reloj = $('#reloj');
+      if (!reloj) return;
+
+      const formato = new Intl.DateTimeFormat('es-MX', {
+        weekday: 'short', day: 'numeric', month: 'short',
+        hour: '2-digit', minute: '2-digit', hour12: false
+      });
+
+      const actualizar = () => {
+        const ahora = new Date();
+        reloj.textContent = formato.format(ahora).replace(/\./g, '');
+        reloj.dateTime = ahora.toISOString();
+      };
+
+      actualizar();
+      setInterval(actualizar, 30000);
+
+      const anio = $('#anio');
+      if (anio) anio.textContent = new Date().getFullYear();
+    }
+
+    /* ---------- Monitoreo: filtro por estado y búsqueda ---------- */
+    const filtro = { estado: 'todos', texto: '' };
+
+    function aplicarFiltro() {
+      const tarjetas = $$('#tablero-viajes .tcard');
+      let visibles = 0;
+
+      tarjetas.forEach((t) => {
+        const coincideEstado = filtro.estado === 'todos' || t.dataset.estado === filtro.estado;
+        const coincideTexto = t.textContent.toLowerCase().includes(filtro.texto);
+        const mostrar = coincideEstado && coincideTexto;
+        t.hidden = !mostrar;
+        if (mostrar) visibles++;
+      });
+
+      $('#sin-resultados').hidden = visibles > 0;
+
+      // La búsqueda también filtra la tabla del tablero
+      $$('#tabla-viajes tbody tr').forEach((fila) => {
+        fila.hidden = !fila.textContent.toLowerCase().includes(filtro.texto);
+      });
+    }
+
+    function iniciarFiltros() {
+      const botones = $$('.seg button');
+      botones.forEach((b) => {
+        b.addEventListener('click', () => {
+          botones.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+          filtro.estado = b.dataset.filtro;
+          aplicarFiltro();
+        });
+      });
+
+      const buscar = $('#buscar');
+      if (!buscar) return;
+
+      buscar.addEventListener('input', () => {
+        filtro.texto = buscar.value.trim().toLowerCase();
+        aplicarFiltro();
+      });
+
+      // Enter lleva al monitoreo con el resultado
+      buscar.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') location.hash = '#monitoreo';
+      });
+
+      // Atajo Ctrl + K (o ⌘ + K) para enfocar el buscador
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+          e.preventDefault();
+          buscar.focus();
+        }
+      });
+    }
+
+    /* ---------- Validación de formularios ---------- */
+    function mensajeDeError(campo) {
+      const v = campo.validity;
+      if (v.valueMissing) return 'Este campo es obligatorio.';
+      if (v.typeMismatch && campo.type === 'email') return 'Escribe un correo válido, por ejemplo usuario@trazzo.mx.';
+      if (v.typeMismatch && campo.type === 'url') return 'Pega un enlace completo que empiece con https://';
+      if (v.tooShort) return `Usa al menos ${campo.minLength} caracteres.`;
+      if (v.rangeUnderflow) return `El valor mínimo es ${campo.min}.`;
+      return 'Revisa este dato.';
+    }
+
+    function validarCampo(campo) {
+      const etiqueta = campo.closest('.f');
+      let error = etiqueta && $('.err', etiqueta);
+
+      if (campo.checkValidity()) {
+        campo.removeAttribute('aria-invalid');
+        if (error) error.remove();
+        return true;
+      }
+
+      campo.setAttribute('aria-invalid', 'true');
+      if (etiqueta && !error) {
+        error = document.createElement('small');
+        error.className = 'err';
+        etiqueta.append(error);
+      }
+      if (error) error.textContent = mensajeDeError(campo);
+      return false;
+    }
+
+    function validarFormulario(form) {
+      const campos = $$('input, select, textarea', form);
+      const validos = campos.map(validarCampo).every(Boolean);
+      if (!validos) $('[aria-invalid="true"]', form)?.focus();
+      return validos;
+    }
+
+    function revalidarAlEscribir(form) {
+      form.addEventListener('input', (e) => {
+        if (e.target.hasAttribute('aria-invalid')) validarCampo(e.target);
+      });
+    }
+
+    /* ---------- Acceso ---------- */
+    function iniciarLogin() {
+      const form = $('#form-login');
+      if (!form) return;
+      revalidarAlEscribir(form);
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!validarFormulario(form)) return;
+        const nombre = form.correo.value.split('@')[0];
+        form.reset();
+        location.hash = '#tablero';
+        mostrarAviso(`Bienvenido, ${nombre}.`);
+      });
+    }
+
+    /* ---------- Nueva ruta ---------- */
+    function iniciarFormRuta() {
+      const form = $('#form-ruta');
+      if (!form) return;
+      revalidarAlEscribir(form);
+
+      // Fecha de salida sugerida: mañana a las 13:00
+      const manana = new Date();
+      manana.setDate(manana.getDate() + 1);
+      manana.setHours(13, 0, 0, 0);
+      const local = new Date(manana.getTime() - manana.getTimezoneOffset() * 60000);
+      form.salida.value = local.toISOString().slice(0, 16);
+
+      // Vista previa: toma la ciudad (último tramo después de la coma)
+      const ciudad = (texto) => (texto.split(',').pop().trim() || '—');
+      const vista = $('#pv-ruta');
+      const actualizarVista = () => {
+        vista.textContent = `${ciudad(form.origen.value)} → ${ciudad(form.destino.value)}`;
+      };
+      form.origen.addEventListener('input', actualizarVista);
+      form.destino.addEventListener('input', actualizarVista);
+      actualizarVista();
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!validarFormulario(form)) return;
+        location.hash = '#asignar';
+        mostrarAviso('Ruta TRZ-0143 guardada. Ahora elige operador y unidad.');
+      });
+    }
+
+    /* ---------- Asignación ---------- */
+    function iniciarAsignacion() {
+      const resumen = $('#res-operador');
+      $$('input[name="op"]').forEach((radio) => {
+        radio.addEventListener('change', () => { resumen.textContent = radio.value; });
+      });
+
+      $('#confirmar-viaje')?.addEventListener('click', () => {
+        const elegido = $('input[name="op"]:checked');
+        mostrarAviso(`Viaje confirmado. Se notificó a ${elegido ? elegido.value : 'el operador'} en su reloj.`);
+      });
+
+      // Botones de funciones aún no disponibles
+      $$('[data-aviso]').forEach((b) => b.addEventListener('click', () => mostrarAviso(b.dataset.aviso)));
+    }
+
+    /* ---------- PWA: funcionamiento sin conexión ---------- */
+    function registrarServiceWorker() {
+      if (!('serviceWorker' in navigator) || location.protocol !== 'https:' && location.hostname !== 'localhost') return;
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => { /* sin soporte en este hospedaje */ });
+      });
+    }
+
+    /* ---------- Arranque ---------- */
+    document.addEventListener('DOMContentLoaded', () => {
+      iniciarMenu();
+      iniciarReloj();
+      iniciarFiltros();
+      iniciarLogin();
+      iniciarFormRuta();
+      iniciarAsignacion();
+    });
+
+    registrarServiceWorker();
+  </script>
+</body>
+
+</html>

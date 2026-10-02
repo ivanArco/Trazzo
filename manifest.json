@@ -1,0 +1,58 @@
+{
+  "id": "/trazzo-control",
+  "name": "Trazzo · Centro de Control",
+  "short_name": "Trazzo",
+  "description": "Emprendimiento de tecnología logística: centro de control web para registrar, asignar y monitorear rutas de carga desde el navegador, la pantalla del patio y el reloj del operador.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0f17",
+  "theme_color": "#12306b",
+  "lang": "es-MX",
+  "dir": "ltr",
+  "categories": [
+    "business",
+    "productivity"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nueva ruta",
+      "short_name": "Nueva ruta",
+      "description": "Registrar un nuevo viaje de carga",
+      "url": "./#ruta"
+    },
+    {
+      "name": "Monitoreo de viajes",
+      "short_name": "Monitoreo",
+      "description": "Ver el avance de los viajes en tiempo real",
+      "url": "./#monitoreo"
+    },
+    {
+      "name": "Tablero de operación",
+      "short_name": "Tablero",
+      "description": "Resumen del día",
+      "url": "./#tablero"
+    }
+  ]
+}
