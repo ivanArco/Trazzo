@@ -40,4 +40,4 @@ for (const r of new Set([...locales, 'sw.js', 'manifest.json'])) await probar('/
 
 servidor.close();
 if (errores) { console.error(`\nVERIFICACIÓN FALLIDA: ${errores} error(es)`); process.exit(1); }
-console.log('\nVE
+console.log('\nVERIFICACIÓN EXITOSA: el artefacto funciona');
