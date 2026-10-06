@@ -1,0 +1,34 @@
+stages:
+  - build
+  - verificar
+  - deploy
+
+# ---------- FASE DE CONSTRUCCIÓN ----------
+construir:
+  stage: build
+  image: node:22-alpine
+  script:
+    - node ci/construir.mjs
+  artifacts:
+    paths:
+      - public/
+    expire_in: 1 week
+
+# ---------- VERIFICACIÓN DEL ARTEFACTO ----------
+verificar_sitio:
+  stage: verificar
+  image: node:22-alpine
+  script:
+    - node ci/verificar.mjs
+
+# ---------- PUBLICACIÓN (GitLab Pages) ----------
+pages:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Publicando el artefacto en GitLab Pages..."
+  artifacts:
+    paths:
+      - public/
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
