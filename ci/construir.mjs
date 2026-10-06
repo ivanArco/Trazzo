@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { spawnSync } from 'node:child_process';
 
 const version = process.env.CI_COMMIT_SHORT_SHA || 'local';
 let errores = 0;
@@ -33,6 +34,26 @@ scripts.forEach((m, i) => {
 
 // Service worker
 revisarJS(fs.readFileSync('sw.js', 'utf8'), 'sw.js');
+
+// Todos los demás archivos .js / .mjs del proyecto (por ejemplo, el backend)
+const ignorar = new Set(['.git', 'node_modules', 'public']);
+function buscarJS(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
+    const ruta = path.join(dir, d.name);
+    if (d.isDirectory()) return ignorar.has(d.name) ? [] : buscarJS(ruta);
+    return /\.(m?js|cjs)$/.test(d.name) && ruta !== 'sw.js' ? [ruta] : [];
+  });
+}
+for (const archivo of buscarJS('.')) {
+  const r = spawnSync(process.execPath, ['--check', archivo], { encoding: 'utf8' });
+  if (r.status === 0) ok(`${archivo}: sintaxis JavaScript correcta`);
+  else {
+    const lineas = (r.stderr || '').trim().split('\n');
+    const donde = lineas[0].split(/[\\/]/).pop();             // archivo:linea
+    const error = lineas.find((l) => /Error/.test(l)) || ''; // tipo de error
+    falla(`${archivo}: ${error} -> ${donde}`);
+  }
+}
 
 // manifest.json
 let manifest = null;
