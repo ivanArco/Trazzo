@@ -21,6 +21,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
+  <!-- Leaflet: mapa con OpenStreetMap para la vista previa de la ruta -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+
   <link rel="stylesheet" href="css/styles.css">
 </head>
 
@@ -52,20 +56,21 @@
 
     <nav class="nav__links" id="menu" aria-label="Principal">
       <a href="#tablero"><svg class="i" aria-hidden="true"><use href="#i-home" /></svg>Tablero</a>
-      <a href="#ruta"><svg class="i" aria-hidden="true"><use href="#i-route" /></svg>Nueva ruta</a>
-      <a href="#asignar"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Asignación<em aria-label="4 pendientes">4</em></a>
+      <a href="#ruta" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-route" /></svg>Nueva ruta</a>
+      <a href="#asignar" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Asignación<em id="nav-por-asignar" hidden></em></a>
       <a href="#monitoreo"><svg class="i" aria-hidden="true"><use href="#i-monitor" /></svg>Monitoreo</a>
-      <a href="#personal"><svg class="i" aria-hidden="true"><use href="#i-users" /></svg>Personal y roles</a>
+      <a href="#personal" data-rol="admin"><svg class="i" aria-hidden="true"><use href="#i-users" /></svg>Personal y roles</a>
       <a href="#guia"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg>Cómo funciona</a>
     </nav>
 
     <div class="nav__tools">
       <label class="search"><svg class="i" aria-hidden="true"><use href="#i-search" /></svg><input type="search" id="buscar" placeholder="Buscar folio, ciudad…" aria-label="Buscar viajes por folio, ciudad u operador"><span class="kbd">Ctrl K</span></label>
+      <button type="button" class="btn btn--ghost btn--sm js-instalar" hidden><svg class="i" aria-hidden="true"><use href="#i-phone" /></svg><span>Instalar app</span></button>
       <span class="clock"><span class="live"></span><time id="reloj">—</time></span>
       <div class="nav__user">
-        <span class="av" aria-hidden="true">IA</span>
-        <div><b>Iván Arcos</b><small>Administrador</small></div>
-        <a href="#login" aria-label="Cerrar sesión" class="muted"><svg class="i" aria-hidden="true"><use href="#i-logout" /></svg></a>
+        <span class="av" aria-hidden="true" id="usuario-iniciales">—</span>
+        <div><b id="usuario-nombre">—</b><small id="usuario-rol"></small></div>
+        <a href="#login" aria-label="Cerrar sesión" class="muted" id="cerrar-sesion"><svg class="i" aria-hidden="true"><use href="#i-logout" /></svg></a>
       </div>
       <button class="nav__toggle" type="button" aria-controls="menu" aria-expanded="false" aria-label="Abrir menú"><svg class="i" aria-hidden="true"><use href="#i-menu" /></svg></button>
     </div>
@@ -82,30 +87,26 @@
           </div>
           <div class="bar__actions">
             <a href="#monitoreo" class="btn btn--ghost"><svg class="i" aria-hidden="true"><use href="#i-tv" /></svg>Modo TV</a>
-            <a href="#ruta" class="btn btn--accent"><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Nueva ruta</a>
+            <a href="#ruta" class="btn btn--accent" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Nueva ruta</a>
           </div>
         </header>
 
         <div class="kpis">
-          <article class="kpi"><small>Viajes activos</small><b>12</b><em class="up">▲ 3 vs. ayer</em><svg class="spark" viewBox="0 0 110 36" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2" points="0,30 15,26 30,28 45,18 60,20 75,12 90,14 110,4" /></svg></article>
-          <article class="kpi"><small>Por asignar</small><b class="c-amber">04</b><em>Requieren operador</em></article>
-          <article class="kpi"><small>Entregas hoy</small><b class="c-green">07</b><em class="up">98 % a tiempo</em><svg class="spark" viewBox="0 0 110 36" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2" points="0,24 15,22 30,26 45,14 60,16 75,10 90,12 110,8" /></svg></article>
-          <article class="kpi"><small>Flete del mes</small><b>$1.28 M</b><em>MXN facturados</em></article>
+          <article class="kpi"><small>Viajes activos</small><b id="kpi-activos">—</b><em id="kpi-retrasos">&nbsp;</em><svg class="spark" viewBox="0 0 110 36" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2" points="0,30 15,26 30,28 45,18 60,20 75,12 90,14 110,4" /></svg></article>
+          <article class="kpi"><small>Por asignar</small><b class="c-amber" id="kpi-por-asignar">—</b><em>Requieren operador</em></article>
+          <article class="kpi"><small>Entregas hoy</small><b class="c-green" id="kpi-entregas">—</b><em>Viajes cerrados hoy</em><svg class="spark" viewBox="0 0 110 36" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="2" points="0,24 15,22 30,26 45,14 60,16 75,10 90,12 110,8" /></svg></article>
+          <article class="kpi"><small>Flete del mes</small><b id="kpi-flete">—</b><em>MXN registrados</em></article>
         </div>
 
         <div class="grid-main">
           <div class="col">
             <article class="panel">
-              <header class="panel__head"><h2>Mapa de unidades</h2><span class="muted">5 unidades con GPS</span></header>
-              <div class="map map--wide" role="img" aria-label="Mapa esquemático con la posición de cinco unidades">
+              <header class="panel__head"><h2>Mapa de unidades</h2><span class="muted" id="mapa-texto">—</span></header>
+              <div class="map map--wide" role="img" aria-label="Mapa esquemático con la posición simulada de las unidades en ruta" id="mapa-unidades">
                 <svg viewBox="0 0 160 70" preserveAspectRatio="none" aria-hidden="true">
-                  <path d="M20 55 C 45 40, 60 50, 80 30 S 120 20, 145 12" fill="none" stroke="currentColor" stroke-width=".6" stroke-dasharray="2 2" />
-                  <path class="p-go" d="M30 15 C 50 25, 70 20, 95 50" fill="none" stroke-width=".6" stroke-dasharray="2 2" style="fill:none" />
-                  <circle cx="80" cy="30" r="2.4" fill="currentColor" />
-                  <circle class="p-go" cx="62" cy="24" r="2.4" />
-                  <circle class="p-alert" cx="120" cy="20" r="2.4" />
-                  <circle class="p-go" cx="40" cy="48" r="2.4" />
-                  <circle class="p-done" cx="145" cy="12" r="2.4" />
+                  <path class="mapa-ruta" d="M20 55 C 45 40, 60 50, 80 30 S 120 20, 145 12" fill="none" stroke="currentColor" stroke-width=".6" stroke-dasharray="2 2" />
+                  <path class="mapa-ruta p-go" d="M30 15 C 50 25, 70 20, 95 50" fill="none" stroke-width=".6" stroke-dasharray="2 2" style="fill:none" />
+                  <g id="mapa-puntos"></g>
                 </svg>
               </div>
             </article>
@@ -115,12 +116,8 @@
               <div class="table-wrap">
                 <table class="table" id="tabla-viajes">
                   <thead><tr><th>Folio</th><th>Ruta</th><th>Operador</th><th>Unidad</th><th>Avance</th><th>ETA</th><th>Estado</th></tr></thead>
-                  <tbody>
-                    <tr><td class="mono">TRZ-0142</td><td>Puebla → CDMX</td><td>J. Pérez</td><td class="mono">PUE-45-8K</td><td><div class="bar-p" style="--p:62%" role="img" aria-label="62 %"></div></td><td>15:40</td><td><span class="st st--go">En ruta</span></td></tr>
-                    <tr><td class="mono">TRZ-0141</td><td>Tlaxcala → Toluca</td><td>R. Sánchez</td><td class="mono">TLX-20-4R</td><td><div class="bar-p" style="--p:35%" role="img" aria-label="35 %"></div></td><td>17:05</td><td><span class="st st--go">En ruta</span></td></tr>
-                    <tr><td class="mono">TRZ-0140</td><td>Veracruz → Monterrey</td><td>—</td><td>—</td><td><div class="bar-p" style="--p:0%" role="img" aria-label="0 %"></div></td><td>—</td><td><span class="st st--wait">Pendiente</span></td></tr>
-                    <tr><td class="mono">TRZ-0138</td><td>León → Tijuana</td><td>A. Ruiz</td><td class="mono">GTO-88-1P</td><td><div class="bar-p" style="--p:81%" role="img" aria-label="81 %"></div></td><td>+40 min</td><td><span class="st st--alert">Retraso</span></td></tr>
-                    <tr><td class="mono">TRZ-0139</td><td>Querétaro → Guadalajara</td><td>L. Méndez</td><td class="mono">QRO-12-3M</td><td><div class="bar-p" style="--p:100%" role="img" aria-label="100 %"></div></td><td>09:12</td><td><span class="st st--done">Entregado</span></td></tr>
+                  <tbody id="tabla-viajes-cuerpo">
+                    <tr><td colspan="7" class="muted">Cargando viajes…</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -129,20 +126,17 @@
 
           <div class="col">
             <article class="panel">
-              <header class="panel__head"><h2>Alertas</h2><span class="badge">3</span></header>
-              <ul class="feed">
-                <li class="alert"><b>TRZ-0138 con 40 min de retraso</b><small>Caseta Querétaro · hace 5 min</small></li>
-                <li class="wait"><b>TRZ-0140 sin operador asignado</b><small>Salida programada a las 13:00</small></li>
-                <li><b>J. Pérez confirmó la carga desde su reloj</b><small>TRZ-0142 · hace 22 min</small></li>
-                <li><b>La póliza GNP-7781 vence en 12 días</b><small>Unidad PUE-45-8K</small></li>
+              <header class="panel__head"><h2>Actividad reciente</h2><span class="badge" id="alertas-total" hidden></span></header>
+              <ul class="feed" id="feed-alertas">
+                <li><b>Cargando…</b></li>
               </ul>
             </article>
             <article class="panel">
               <header class="panel__head"><h2>Flota</h2></header>
               <div class="fleet">
-                <div><b class="c-green">14</b><small>Disponibles</small></div>
-                <div><b class="c-accent">12</b><small>En ruta</small></div>
-                <div><b>03</b><small>En taller</small></div>
+                <div><b class="c-green" id="flota-disponible">—</b><small>Disponibles</small></div>
+                <div><b class="c-accent" id="flota-en-ruta">—</b><small>En ruta</small></div>
+                <div><b id="flota-taller">—</b><small>En taller</small></div>
               </div>
             </article>
           </div>
@@ -155,7 +149,7 @@
       <div class="wrap">
         <header class="bar">
           <div>
-            <p class="eyebrow">Folio generado · <span class="mono c-accent">TRZ-0143</span></p>
+            <p class="eyebrow">El folio se genera al guardar</p>
             <h1 id="t-ruta">Registrar nueva ruta</h1>
           </div>
         </header>
@@ -182,7 +176,8 @@
             <div class="sep"></div>
             <h2 class="form__h"><span>03</span>Cliente</h2>
             <div class="cols">
-              <label class="f"><span>Cliente</span><select name="cliente"><option>Logística del Golfo, S. A.</option><option>Cafés de Veracruz</option></select></label>
+              <label class="f"><span>Cliente</span><input name="cliente" list="lista-clientes" required placeholder="Nombre del cliente"></label>
+              <datalist id="lista-clientes"><option value="Logística del Golfo, S. A."><option value="Cafés de Veracruz"><option value="Textiles de Tlaxcala"></datalist>
               <label class="f"><span>Fecha y hora de salida</span><input name="salida" type="datetime-local" required></label>
             </div>
 
@@ -195,7 +190,7 @@
           <aside class="sticky">
             <div class="panel">
               <header class="panel__head"><h2>Vista previa de la ruta</h2></header>
-              <div class="map map--card" role="img" aria-label="Trazo esquemático de origen a destino">
+              <div class="map map--card" id="mapa-ruta" role="img" aria-label="Mapa con el recorrido por carretera de origen a destino">
                 <svg viewBox="0 0 100 75" preserveAspectRatio="none" aria-hidden="true">
                   <path d="M15 60 C 35 15, 60 65, 85 18" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 3" />
                   <circle class="p-go" cx="15" cy="60" r="4" />
@@ -206,11 +201,13 @@
             <div class="panel">
               <dl class="kv">
                 <div><dt>Ruta</dt><dd id="pv-ruta">Puebla → —</dd></div>
-                <div><dt>Distancia estimada</dt><dd>134 km</dd></div>
-                <div><dt>Tiempo estimado</dt><dd>2 h 10 min</dd></div>
-                <div><dt>Capturó</dt><dd>Daniel B.</dd></div>
+                <div><dt>Distancia</dt><dd id="pv-distancia">—</dd></div>
+                <div><dt>Tiempo de traslado</dt><dd id="pv-tiempo" class="c-accent">—</dd></div>
+                <div><dt>Llegada estimada</dt><dd id="pv-llegada">—</dd></div>
+                <div><dt>Capturó</dt><dd id="pv-capturo">—</dd></div>
                 <div><dt>Estado</dt><dd><span class="st st--wait">Borrador</span></dd></div>
               </dl>
+              <p class="pv-nota muted" id="pv-nota" aria-live="polite">Escribe origen y destino para calcular el recorrido.</p>
             </div>
           </aside>
         </div>
@@ -222,34 +219,30 @@
       <div class="wrap">
         <header class="bar">
           <div>
-            <p class="eyebrow">Folio <span class="mono c-accent">TRZ-0143</span> · Puebla → CDMX</p>
+            <p class="eyebrow">Folio <span class="mono c-accent" id="as-folio">—</span> · <span id="as-ruta">—</span></p>
             <h1 id="t-asignar">Asignar operador y unidad</h1>
           </div>
         </header>
 
         <div class="grid-form">
           <div class="col">
+            <article class="panel form">
+              <label class="f"><span>Viaje por asignar</span><select id="as-viaje"></select></label>
+              <p class="empty" id="as-vacio" hidden>No hay viajes pendientes. <a href="#ruta">Registra una ruta nueva</a>.</p>
+            </article>
+
             <article class="panel">
-              <header class="panel__head"><h2>Operadores</h2><span class="muted">3 disponibles de 18</span></header>
-              <div class="pick">
-                <label><input type="radio" name="op" value="Juan Pérez" checked><span class="av">JP</span><span><b>Juan Pérez</b><small>Licencia federal B · 4 viajes este mes</small></span><span class="muted">4.9 ★</span><span class="st st--go">Libre</span></label>
-                <label><input type="radio" name="op" value="Laura Méndez"><span class="av">LM</span><span><b>Laura Méndez</b><small>Licencia federal E · 6 viajes este mes</small></span><span class="muted">4.8 ★</span><span class="st st--go">Libre</span></label>
-                <label><input type="radio" name="op" value="Raúl Sánchez"><span class="av">RS</span><span><b>Raúl Sánchez</b><small>Licencia federal B · en TRZ-0141</small></span><span class="muted">4.6 ★</span><span class="st st--wait">14:00</span></label>
-              </div>
+              <header class="panel__head"><h2>Operadores</h2><span class="muted" id="as-op-total">—</span></header>
+              <div class="pick" id="as-operadores"></div>
             </article>
 
             <article class="panel form">
               <header class="panel__head"><h2>Unidad</h2></header>
-              <div class="cols">
-                <label class="f"><span>Marca y modelo</span><select><option>Kenworth T680</option><option>Freightliner Cascadia</option><option>International LT</option></select></label>
-                <label class="f"><span>Año</span><input value="2022" inputmode="numeric"></label>
-                <label class="f"><span>Placas</span><input value="PUE-45-8K" class="mono"></label>
-                <label class="f"><span>Peso bruto vehicular</span><input value="36,000 kg"></label>
-              </div>
-              <label class="f"><span>Póliza de seguro</span><input value="GNP-7781-2026" class="mono"></label>
+              <label class="f"><span>Unidad disponible</span><select id="as-unidad"></select></label>
+              <dl class="kv" id="as-unidad-info"></dl>
               <div class="actions">
                 <a href="#ruta" class="btn btn--ghost">← Atrás</a>
-                <a href="#monitoreo" class="btn btn--accent" id="confirmar-viaje"><svg class="i" aria-hidden="true"><use href="#i-check" /></svg>Confirmar viaje</a>
+                <button type="button" class="btn btn--accent" id="confirmar-viaje"><svg class="i" aria-hidden="true"><use href="#i-check" /></svg>Confirmar viaje</button>
               </div>
             </article>
           </div>
@@ -257,12 +250,14 @@
           <aside class="panel sticky">
             <header class="panel__head"><h2>Resumen del viaje</h2></header>
             <dl class="kv">
-              <div><dt>Origen</dt><dd>Parque FINSA, Puebla</dd></div>
-              <div><dt>Destino</dt><dd>Azcapotzalco, CDMX</dd></div>
-              <div><dt>Mercancía</dt><dd>24 tarimas de café</dd></div>
-              <div><dt>Peso</dt><dd>18,000 kg</dd></div>
-              <div><dt>Flete</dt><dd class="c-accent">$28,400 MXN</dd></div>
-              <div><dt>Operador</dt><dd id="res-operador">Juan Pérez</dd></div>
+              <div><dt>Origen</dt><dd id="res-origen">—</dd></div>
+              <div><dt>Destino</dt><dd id="res-destino">—</dd></div>
+              <div><dt>Mercancía</dt><dd id="res-mercancia">—</dd></div>
+              <div><dt>Peso</dt><dd id="res-peso">—</dd></div>
+              <div><dt>Flete</dt><dd class="c-accent" id="res-flete">—</dd></div>
+              <div><dt>Salida</dt><dd id="res-salida">—</dd></div>
+              <div><dt>Operador</dt><dd id="res-operador">—</dd></div>
+              <div><dt>Unidad</dt><dd id="res-unidad">—</dd></div>
               <div><dt>Notificación</dt><dd>Reloj Wear OS del operador</dd></div>
             </dl>
           </aside>
@@ -275,7 +270,7 @@
       <div class="wrap">
         <header class="bar">
           <div>
-            <p class="eyebrow"><span class="live"></span>Actualización en tiempo real</p>
+            <p class="eyebrow"><span class="live"></span>Seguimiento simulado · <span id="mon-actualizado">cargando…</span></p>
             <h1 id="t-monitoreo">Monitoreo de viajes</h1>
           </div>
           <div class="seg" role="group" aria-label="Filtrar viajes por estado">
@@ -287,14 +282,7 @@
           </div>
         </header>
 
-        <div class="board" id="tablero-viajes">
-          <article class="tcard tcard--go" data-estado="go"><header><span class="mono">TRZ-0142</span><span class="st st--go">En ruta</span></header><h3>Puebla <i>→</i> CDMX</h3><div class="track"><span style="--p:62%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>J. Pérez</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>ETA 15:40</span></footer></article>
-          <article class="tcard tcard--alert" data-estado="alert"><header><span class="mono">TRZ-0138</span><span class="st st--alert">Retraso</span></header><h3>León <i>→</i> Tijuana</h3><div class="track"><span style="--p:81%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>A. Ruiz</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>+40 min</span></footer></article>
-          <article class="tcard tcard--go" data-estado="go"><header><span class="mono">TRZ-0141</span><span class="st st--go">En ruta</span></header><h3>Tlaxcala <i>→</i> Toluca</h3><div class="track"><span style="--p:35%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>R. Sánchez</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>ETA 17:05</span></footer></article>
-          <article class="tcard tcard--wait" data-estado="wait"><header><span class="mono">TRZ-0140</span><span class="st st--wait">Pendiente</span></header><h3>Veracruz <i>→</i> Monterrey</h3><div class="track"><span style="--p:0%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>Sin asignar</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>Sale 13:00</span></footer></article>
-          <article class="tcard tcard--go" data-estado="go"><header><span class="mono">TRZ-0143</span><span class="st st--go">Cargando</span></header><h3>Puebla <i>→</i> CDMX</h3><div class="track"><span style="--p:5%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>J. Pérez</span><span><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>Sale 13:00</span></footer></article>
-          <article class="tcard tcard--done" data-estado="done"><header><span class="mono">TRZ-0139</span><span class="st st--done">Entregado</span></header><h3>Querétaro <i>→</i> Guadalajara</h3><div class="track"><span style="--p:100%"></span></div><footer><span><svg class="i" aria-hidden="true"><use href="#i-user" /></svg>L. Méndez</span><span><svg class="i" aria-hidden="true"><use href="#i-check" /></svg>09:12</span></footer></article>
-        </div>
+        <div class="board" id="tablero-viajes"></div>
         <p class="empty" id="sin-resultados" hidden>No hay viajes que coincidan con el filtro.</p>
       </div>
     </section>
@@ -307,29 +295,24 @@
             <p class="eyebrow">Control de acceso</p>
             <h1 id="t-personal">Personal y roles</h1>
           </div>
-          <button type="button" class="btn btn--accent" data-aviso="Formulario de registro disponible en la siguiente versión."><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Registrar usuario</button>
+          <button type="button" class="btn btn--accent" id="btn-nuevo-usuario"><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Registrar usuario</button>
         </header>
 
         <div class="kpis">
-          <article class="kpi"><small>Administradores</small><b>2</b></article>
-          <article class="kpi"><small>Capturistas</small><b>5</b></article>
-          <article class="kpi"><small>Operadores</small><b>18</b></article>
-          <article class="kpi"><small>Clientes</small><b>9</b></article>
+          <article class="kpi"><small>Administradores</small><b data-kpi="admin">—</b></article>
+          <article class="kpi"><small>Capturistas</small><b data-kpi="capturista">—</b></article>
+          <article class="kpi"><small>Operadores</small><b data-kpi="operador">—</b></article>
+          <article class="kpi"><small>Clientes</small><b data-kpi="cliente">—</b></article>
         </div>
 
         <div class="grid-main">
           <article class="panel">
-            <header class="panel__head"><h2>Usuarios</h2><span class="muted">34 registrados</span></header>
+            <header class="panel__head"><h2>Usuarios</h2><span class="muted" id="total-usuarios">Cargando…</span></header>
             <div class="table-wrap">
               <table class="table">
-                <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Dispositivos</th><th>Estado</th></tr></thead>
-                <tbody>
-                  <tr><td><b>Iván Arcos</b></td><td class="muted">ivan@trazzo.mx</td><td><span class="role role--admin">Administrador</span></td><td>Web · TV</td><td><span class="st st--go">Activo</span></td></tr>
-                  <tr><td><b>Miriam González</b></td><td class="muted">miriam@trazzo.mx</td><td><span class="role role--admin">Administradora</span></td><td>Web · TV</td><td><span class="st st--go">Activo</span></td></tr>
-                  <tr><td><b>Daniel Barrios</b></td><td class="muted">daniel@trazzo.mx</td><td><span class="role role--cap">Capturista</span></td><td>Web</td><td><span class="st st--go">Activo</span></td></tr>
-                  <tr><td><b>Juan Pérez</b></td><td class="muted">juan.perez@trazzo.mx</td><td><span class="role role--op">Operador</span></td><td>Móvil · Wear OS</td><td><span class="st st--go">En ruta</span></td></tr>
-                  <tr><td><b>Laura Méndez</b></td><td class="muted">laura@trazzo.mx</td><td><span class="role role--op">Operadora</span></td><td>Móvil · Wear OS</td><td><span class="st st--go">Activo</span></td></tr>
-                  <tr><td><b>Rocío Herrera</b></td><td class="muted">rherrera@golfo.com</td><td><span class="role role--cli">Cliente</span></td><td>Web</td><td><span class="st st--done">Inactivo</span></td></tr>
+                <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Dispositivos</th></tr></thead>
+                <tbody id="tabla-usuarios">
+                  <tr><td colspan="4" class="muted">Cargando usuarios…</td></tr>
                 </tbody>
               </table>
             </div>
@@ -486,11 +469,54 @@
       <label class="f"><span>Correo electrónico</span><input name="correo" type="email" required placeholder="usuario@trazzo.mx" autocomplete="username"></label>
       <label class="f"><span>Contraseña</span><input name="clave" type="password" required minlength="6" placeholder="••••••••" autocomplete="current-password"></label>
       <button type="submit" class="btn btn--accent btn--block">Entrar</button>
-      <p class="muted login__note">Demostración: escribe cualquier correo y una contraseña de 6 caracteres o más.</p>
+      <p class="muted login__note">Usa la cuenta que te asignó el administrador de Trazzo.</p>
+      <button type="button" class="btn btn--ghost btn--block js-instalar" hidden><svg class="i" aria-hidden="true"><use href="#i-phone" /></svg>Instalar Trazzo en este dispositivo</button>
     </form>
   </section>
 
+  <!-- ===================== REGISTRO DE USUARIO ===================== -->
+  <dialog class="dialog" id="dlg-usuario" aria-labelledby="t-dlg-usuario">
+    <form class="form" id="form-usuario" novalidate>
+      <h2 id="t-dlg-usuario">Registrar usuario</h2>
+      <label class="f"><span>Nombre completo</span><input name="nombre" required placeholder="Ej. Laura Méndez" autocomplete="off"></label>
+      <label class="f"><span>Correo electrónico</span><input name="correo" type="email" required placeholder="usuario@trazzo.mx" autocomplete="off"></label>
+      <label class="f"><span>Contraseña inicial</span><input name="clave" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></label>
+      <label class="f"><span>Rol</span>
+        <select name="rol" required>
+          <option value="operador">Operador</option>
+          <option value="capturista">Capturista</option>
+          <option value="cliente">Cliente</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      <p class="err" id="err-usuario" role="alert" hidden></p>
+      <div class="dialog__acciones">
+        <button type="button" class="btn btn--ghost" id="cancelar-usuario">Cancelar</button>
+        <button type="submit" class="btn btn--accent">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Aviso flotante -->
+  <!-- ===================== SEGUIMIENTO DE UN VIAJE ===================== -->
+  <dialog class="dialog dialog--ancho" id="dlg-viaje" aria-labelledby="dv-ruta">
+    <div class="tcard" id="dv-tarjeta">
+      <header><span class="mono" id="dv-folio">—</span><span class="st" id="dv-estado">—</span></header>
+      <h3 id="dv-ruta">—</h3>
+      <div class="track"><span id="dv-avance" style="--p:0%"></span></div>
+    </div>
+    <dl class="kv" id="dv-datos"></dl>
+    <div class="dv-acciones" id="dv-acciones">
+      <label class="f" id="dv-nota-campo"><span>Nota (opcional)</span><input id="dv-nota" maxlength="150" placeholder="Ej. Tráfico en la caseta"></label>
+      <div class="actions" id="dv-botones"></div>
+    </div>
+    <h3 class="dv-titulo">Historial</h3>
+    <ul class="feed" id="dv-eventos"></ul>
+    <div class="actions"><button type="button" class="btn btn--ghost" id="dv-cerrar">Cerrar</button></div>
+  </dialog>
+
+  <div class="banda banda--offline" id="aviso-offline" role="status" hidden>Sin conexión · se muestran los últimos datos guardados</div>
+  <div class="banda banda--version" id="aviso-version" role="status" hidden>Hay una nueva versión de Trazzo <button type="button" class="btn btn--accent btn--sm" id="btn-actualizar">Actualizar</button></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <!-- ===================== JAVASCRIPT ===================== -->
   <script>
@@ -510,6 +536,8 @@
     function mostrarAviso(texto) {
       const toast = $('#toast');
       if (!toast) return;
+      // Con un diálogo abierto, el aviso va dentro de él para que no quede detrás
+      ($('dialog[open]') || document.body).append(toast);
       toast.textContent = texto;
       toast.classList.add('is-on');
       clearTimeout(temporizadorAviso);
@@ -672,37 +700,559 @@
       });
     }
 
-    /* ---------- Acceso ---------- */
+    /* ---------- Utilidades: HTML seguro y formatos ---------- */
+    // Todo texto entra con textContent: un dato de la base nunca se interpreta como HTML
+    function el(etiqueta, props = {}, ...hijos) {
+      const nodo = document.createElement(etiqueta);
+      for (const [clave, valor] of Object.entries(props)) {
+        if (valor === null || valor === undefined || valor === false) continue;
+        if (clave === 'class') nodo.className = valor;
+        else if (clave === 'text') nodo.textContent = valor;
+        else if (clave === 'style') nodo.style.cssText = valor;
+        else if (clave.startsWith('on')) nodo.addEventListener(clave.slice(2), valor);
+        else nodo.setAttribute(clave, valor === true ? '' : valor);
+      }
+      nodo.append(...hijos.flat().filter((h) => h !== null && h !== undefined && h !== false));
+      return nodo;
+    }
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    function icono(nombre) {
+      const svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('class', 'i');
+      svg.setAttribute('aria-hidden', 'true');
+      const use = document.createElementNS(SVG_NS, 'use');
+      use.setAttribute('href', `#${nombre}`);
+      svg.append(use);
+      return svg;
+    }
+
+    const fmtHora = new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const fmtFechaHora = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+    const fmtDinero = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+    const fmtDineroCorto = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', notation: 'compact', maximumFractionDigits: 1 });
+    const fmtNumero = new Intl.NumberFormat('es-MX');
+    const fmtRelativo = new Intl.RelativeTimeFormat('es-MX', { numeric: 'auto' });
+
+    const esHoy = (fecha) => new Date(fecha).toDateString() === new Date().toDateString();
+    const hora = (fecha) => (fecha ? (esHoy(fecha) ? fmtHora : fmtFechaHora).format(new Date(fecha)).replace(/\./g, '') : '—');
+    const dosDigitos = (n) => String(n).padStart(2, '0');
+
+    function haceCuanto(fecha) {
+      const minutos = Math.round((new Date(fecha) - Date.now()) / 60000);
+      if (Math.abs(minutos) < 60) return fmtRelativo.format(minutos, 'minute');
+      const horas = Math.round(minutos / 60);
+      if (Math.abs(horas) < 24) return fmtRelativo.format(horas, 'hour');
+      return fmtRelativo.format(Math.round(horas / 24), 'day');
+    }
+
+    // "Parque Industrial FINSA, Puebla" → "Puebla"
+    const ciudad = (texto) => ((texto || '').split(',').pop().trim() || '—');
+    // "Juan Pérez" → "J. Pérez"
+    const nombreCorto = (nombre) => {
+      const partes = (nombre || '').trim().split(/\s+/);
+      return partes.length > 1 ? `${partes[0][0]}. ${partes.slice(1).join(' ')}` : (nombre || '—');
+    };
+    const iniciales = (nombre) => (nombre || '').trim().split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+
+    // Estado del viaje → texto y color (go, wait, alert, done son las clases del diseño)
+    const ESTADOS = {
+      pendiente: { texto: 'Pendiente', clase: 'wait' },
+      asignado: { texto: 'Asignado', clase: 'go' },
+      en_ruta: { texto: 'En ruta', clase: 'go' },
+      retraso: { texto: 'Retraso', clase: 'alert' },
+      entregado: { texto: 'Entregado', clase: 'done' },
+      cancelado: { texto: 'Cancelado', clase: 'done' }
+    };
+
+    function etaTexto(viaje) {
+      if (['pendiente', 'asignado'].includes(viaje.estado)) return `Sale ${hora(viaje.salida)}`;
+      if (viaje.estado === 'entregado') return hora(viaje.entregado_en);
+      if (viaje.estado === 'cancelado') return '—';
+      return `ETA ${hora(viaje.eta)}`;
+    }
+
+    /* ---------- Conexión con la API (backend) ---------- */
+    // Dirección del backend. Cámbiala cuando lo publiques en internet.
+    const API_URL = 'http://localhost:3000/api';
+
+    const ROLES = {
+      admin: { nombre: 'Administrador', clase: 'role--admin', dispositivos: 'Web · TV' },
+      capturista: { nombre: 'Capturista', clase: 'role--cap', dispositivos: 'Web' },
+      operador: { nombre: 'Operador', clase: 'role--op', dispositivos: 'Móvil · Wear OS' },
+      cliente: { nombre: 'Cliente', clase: 'role--cli', dispositivos: 'Web' }
+    };
+
+    // La sesión vive en sessionStorage: se borra al cerrar la pestaña
+    const sesion = {
+      leer() {
+        try { return JSON.parse(sessionStorage.getItem('trazzo-sesion')); } catch { return null; }
+      },
+      guardar(datos) { sessionStorage.setItem('trazzo-sesion', JSON.stringify(datos)); },
+      borrar() { sessionStorage.removeItem('trazzo-sesion'); }
+    };
+
+    // Copia de las últimas consultas para poder mostrarlas sin conexión
+    const PREFIJO_CACHE = 'trazzo-cache:';
+    const cacheApi = {
+      leer(ruta) {
+        try { return JSON.parse(localStorage.getItem(PREFIJO_CACHE + ruta)); } catch { return null; }
+      },
+      guardar(ruta, datos) {
+        try { localStorage.setItem(PREFIJO_CACHE + ruta, JSON.stringify(datos)); } catch { /* almacenamiento lleno o bloqueado */ }
+      },
+      borrar() {
+        try {
+          Object.keys(localStorage).filter((k) => k.startsWith(PREFIJO_CACHE)).forEach((k) => localStorage.removeItem(k));
+        } catch { /* sin acceso al almacenamiento */ }
+      }
+    };
+
+    // fetch con el token y manejo de errores; lanza Error con el mensaje del servidor
+    async function api(ruta, { method = 'GET', body } = {}) {
+      const token = sesion.leer()?.token;
+      let respuesta;
+      try {
+        respuesta = await fetch(API_URL + ruta, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { Authorization: `Bearer ${token}` })
+          },
+          body: body && JSON.stringify(body)
+        });
+      } catch {
+        // Sin red: las consultas usan la última copia guardada; los cambios no se pueden enviar
+        const guardado = method === 'GET' && cacheApi.leer(ruta);
+        if (guardado) return guardado;
+        throw new Error(navigator.onLine
+          ? 'No hay conexión con el servidor. ¿Está encendido el backend?'
+          : 'Sin conexión a internet. Inténtalo cuando vuelva la señal.');
+      }
+
+      const datos = await respuesta.json().catch(() => ({}));
+      if (respuesta.status === 401 && token) {
+        cerrarSesion();
+        mostrarAviso(datos.message || 'Tu sesión expiró.');
+      }
+      if (!respuesta.ok) throw new Error(datos.message || `Error ${respuesta.status}`);
+      if (method === 'GET') cacheApi.guardar(ruta, datos);
+      return datos;
+    }
+
+    /* ---------- Acceso y permisos por rol ---------- */
+    let destinoTrasLogin = '#tablero';
+
+    // data-rol="admin capturista" → solo esos roles ven el elemento o la sección
+    const permitidoPara = (elemento, rol) => !elemento?.dataset.rol || elemento.dataset.rol.split(' ').includes(rol);
+    const enlaceDeSeccion = (hash) => $$('.nav__links a').find((a) => a.getAttribute('href') === hash);
+    const usuarioActual = () => sesion.leer()?.usuario;
+    const esOficina = () => ['admin', 'capturista'].includes(usuarioActual()?.rol);
+
+    function mostrarUsuario(usuario) {
+      const rol = ROLES[usuario?.rol];
+      $('#usuario-iniciales').textContent = iniciales(usuario?.nombre) || '—';
+      $('#usuario-nombre').textContent = usuario?.nombre || '—';
+      $('#usuario-rol').textContent = rol ? rol.nombre : '';
+      $('#pv-capturo').textContent = usuario?.nombre || '—';
+
+      // Oculta enlaces y botones que no corresponden al rol
+      $$('[data-rol]').forEach((n) => { n.hidden = !permitidoPara(n, usuario?.rol); });
+    }
+
+    function cerrarSesion() {
+      sesion.borrar();
+      cacheApi.borrar();
+      mostrarUsuario(null);
+      location.hash = '#login';
+    }
+
+    // Sin sesión solo se puede ver el acceso; con sesión, solo las secciones del rol
+    function protegerSecciones() {
+      const actual = location.hash;
+      const usuario = usuarioActual();
+
+      if (!usuario) {
+        if (actual && actual !== '#login') {
+          destinoTrasLogin = actual;
+          location.hash = '#login';
+        }
+        return false;
+      }
+      if (!permitidoPara(enlaceDeSeccion(actual), usuario.rol)) {
+        mostrarAviso('Tu rol no tiene acceso a esa sección.');
+        location.hash = '#tablero';
+        return false;
+      }
+      return true;
+    }
+
     function iniciarLogin() {
       const form = $('#form-login');
       if (!form) return;
       revalidarAlEscribir(form);
 
-      form.addEventListener('submit', (e) => {
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!validarFormulario(form)) return;
-        const nombre = form.correo.value.split('@')[0];
-        form.reset();
-        location.hash = '#tablero';
-        mostrarAviso(`Bienvenido, ${nombre}.`);
+
+        const boton = $('button[type="submit"]', form);
+        boton.disabled = true;
+        try {
+          const datos = await api('/auth/login', {
+            method: 'POST',
+            body: { correo: form.correo.value, contraseña: form.clave.value }
+          });
+          sesion.guardar(datos);
+          mostrarUsuario(datos.usuario);
+          form.reset();
+          location.hash = destinoTrasLogin === '#login' ? '#tablero' : destinoTrasLogin;
+          mostrarAviso(`Bienvenido, ${datos.usuario.nombre}.`);
+        } catch (error) {
+          mostrarAviso(error.message);
+        } finally {
+          boton.disabled = false;
+        }
+      });
+
+      $('#cerrar-sesion')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        cerrarSesion();
+        mostrarAviso('Sesión cerrada.');
+      });
+
+      // Al recargar la página se conserva la sesión; se confirma con el servidor
+      const guardada = sesion.leer();
+      mostrarUsuario(guardada?.usuario);
+      if (guardada) api('/auth/me').catch(() => { /* api() ya cierra la sesión si expiró */ });
+    }
+
+    /* ---------- Carga de datos por sección ---------- */
+    const cargadores = {
+      tablero: cargarTablero,
+      monitoreo: cargarMonitoreo,
+      asignar: cargarAsignacion,
+      personal: cargarUsuarios
+    };
+
+    async function cargarSeccion({ silencioso = false } = {}) {
+      const cargar = cargadores[location.hash.slice(1)];
+      if (!cargar || !usuarioActual() || !permitidoPara(enlaceDeSeccion(location.hash), usuarioActual().rol)) return;
+      try {
+        await cargar();
+      } catch (error) {
+        if (!silencioso) mostrarAviso(error.message);
+      }
+    }
+
+    function iniciarNavegacionConDatos() {
+      window.addEventListener('hashchange', () => {
+        if (protegerSecciones()) cargarSeccion();
+      });
+      if (protegerSecciones()) cargarSeccion();
+
+      // Seguimiento en vivo: cada 10 s se refresca lo que se está viendo
+      setInterval(() => {
+        if (document.hidden || !navigator.onLine || !usuarioActual()) return;
+        if (['#tablero', '#monitoreo'].includes(location.hash)) cargarSeccion({ silencioso: true });
+        if ($('#dlg-viaje').open) refrescarDetalle();
+      }, 10000);
+    }
+
+    /* ---------- Tablero ---------- */
+    async function cargarTablero() {
+      const [resumen, viajes, eventos] = await Promise.all([
+        api('/viajes/resumen'), api('/viajes'), api('/viajes/eventos')
+      ]);
+      pintarResumen(resumen);
+      pintarTablaViajes(viajes);
+      pintarMapa(viajes);
+      pintarEventos(eventos);
+      aplicarFiltro();
+    }
+
+    function pintarResumen(r) {
+      $('#kpi-activos').textContent = dosDigitos(r.activos);
+      $('#kpi-retrasos').textContent = r.retrasos ? `${r.retrasos} con retraso` : 'Sin retrasos';
+      $('#kpi-por-asignar').textContent = dosDigitos(r.por_asignar);
+      $('#kpi-entregas').textContent = dosDigitos(r.entregas_hoy);
+      $('#kpi-flete').textContent = fmtDineroCorto.format(r.flete_mes);
+      $('#flota-disponible').textContent = dosDigitos(r.flota.disponible);
+      $('#flota-en-ruta').textContent = dosDigitos(r.flota.en_ruta);
+      $('#flota-taller').textContent = dosDigitos(r.flota.taller);
+
+      const badge = $('#alertas-total');
+      badge.hidden = !r.retrasos;
+      badge.textContent = r.retrasos;
+      badge.title = 'Viajes con retraso';
+      pintarContadorMenu(r.por_asignar);
+    }
+
+    function pintarContadorMenu(porAsignar) {
+      const em = $('#nav-por-asignar');
+      em.hidden = !porAsignar;
+      em.textContent = porAsignar;
+      em.setAttribute('aria-label', `${porAsignar} por asignar`);
+    }
+
+    function pintarTablaViajes(viajes) {
+      const cuerpo = $('#tabla-viajes-cuerpo');
+      const filas = viajes.slice(0, 8).map((v) => {
+        const e = ESTADOS[v.estado];
+        return el('tr', { class: 'fila-viaje', tabindex: 0, onclick: () => abrirDetalle(v.id), onkeydown: (ev) => { if (ev.key === 'Enter') abrirDetalle(v.id); } },
+          el('td', { class: 'mono', text: v.folio }),
+          el('td', { text: `${ciudad(v.origen)} → ${ciudad(v.destino)}` }),
+          el('td', { text: v.operador ? nombreCorto(v.operador) : '—' }),
+          el('td', { class: 'mono', text: v.placas || '—' }),
+          el('td', {}, el('div', { class: 'bar-p', style: `--p:${v.avance}%`, role: 'img', 'aria-label': `${v.avance} %` })),
+          el('td', { text: etaTexto(v) }),
+          el('td', {}, el('span', { class: `st st--${e.clase}`, text: e.texto })));
+      });
+      cuerpo.replaceChildren(...(filas.length ? filas : [el('tr', {}, el('td', { colspan: 7, class: 'muted', text: 'Aún no hay viajes registrados.' }))]));
+    }
+
+    // Mapa esquemático: cada viaje en movimiento se coloca sobre una ruta según su avance (simulado)
+    function pintarMapa(viajes) {
+      const enMovimiento = viajes.filter((v) => ['en_ruta', 'retraso'].includes(v.estado));
+      const rutas = $$('#mapa-unidades .mapa-ruta');
+      const grupo = $('#mapa-puntos');
+      const vigentes = new Set();
+
+      enMovimiento.forEach((v, i) => {
+        const ruta = rutas[i % rutas.length];
+        const punto = ruta.getPointAtLength(ruta.getTotalLength() * v.avance / 100);
+        let circulo = grupo.querySelector(`[data-id="${v.id}"]`);
+        if (!circulo) {
+          circulo = document.createElementNS(SVG_NS, 'circle');
+          circulo.dataset.id = v.id;
+          circulo.setAttribute('r', '2.4');
+          circulo.append(document.createElementNS(SVG_NS, 'title'));
+          grupo.append(circulo);
+        }
+        circulo.setAttribute('class', `punto ${v.estado === 'retraso' ? 'p-alert' : 'p-go'}`);
+        circulo.setAttribute('cx', punto.x);
+        circulo.setAttribute('cy', punto.y);
+        circulo.firstChild.textContent = `${v.folio} · ${v.avance} %`;
+        vigentes.add(String(v.id));
+      });
+      $$('circle', grupo).forEach((c) => { if (!vigentes.has(c.dataset.id)) c.remove(); });
+
+      const n = enMovimiento.length;
+      $('#mapa-texto').textContent = n ? `${n} unidad${n === 1 ? '' : 'es'} en movimiento · posición simulada` : 'Sin unidades en movimiento';
+    }
+
+    const claseEvento = (tipo) => ({ retraso: 'alert', creado: 'wait', cancelado: 'alert' }[tipo] || '');
+
+    function pintarEventos(eventos) {
+      const feed = $('#feed-alertas');
+      const items = eventos.map((ev) => el('li', { class: `${claseEvento(ev.tipo)} fila-viaje`, tabindex: 0, onclick: () => abrirDetalle(ev.viaje_id) },
+        el('b', { text: `${ev.folio} · ${ev.descripcion}` }),
+        el('small', { text: haceCuanto(ev.creado_en) })));
+      feed.replaceChildren(...(items.length ? items : [el('li', {}, el('b', { text: 'Sin actividad todavía' }))]));
+    }
+
+    /* ---------- Monitoreo ---------- */
+    async function cargarMonitoreo() {
+      const viajes = await api('/viajes');
+      $('#tablero-viajes').replaceChildren(...viajes.map(tarjetaViaje));
+      $('#mon-actualizado').textContent = `actualizado ${new Date().toLocaleTimeString('es-MX')}`;
+      aplicarFiltro();
+    }
+
+    function tarjetaViaje(v) {
+      const e = ESTADOS[v.estado];
+      return el('article', { class: `tcard tcard--${e.clase}`, 'data-estado': e.clase },
+        el('header', {}, el('span', { class: 'mono', text: v.folio }), el('span', { class: `st st--${e.clase}`, text: e.texto })),
+        el('h3', {}, `${ciudad(v.origen)} `, el('i', { text: '→' }), ` ${ciudad(v.destino)}`),
+        el('div', { class: 'track' }, el('span', { style: `--p:${v.avance}%` })),
+        el('footer', {},
+          el('span', {}, icono('i-user'), v.operador ? nombreCorto(v.operador) : 'Sin asignar'),
+          el('span', {}, icono(v.estado === 'entregado' ? 'i-check' : 'i-clock'), etaTexto(v))),
+        el('button', { type: 'button', class: 'tcard__ver', onclick: () => abrirDetalle(v.id) }, `Seguimiento · ${v.avance} % →`));
+    }
+
+    /* ---------- Seguimiento de un viaje (diálogo) ---------- */
+    let viajeAbierto = null;
+
+    async function abrirDetalle(id) {
+      try {
+        viajeAbierto = id;
+        $('#dv-nota').value = '';
+        pintarDetalle(await api(`/viajes/${id}`));
+        const dialogo = $('#dlg-viaje');
+        if (!dialogo.open) dialogo.showModal();
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    async function refrescarDetalle() {
+      if (!viajeAbierto) return;
+      try { pintarDetalle(await api(`/viajes/${viajeAbierto}`)); } catch { /* se reintenta en la siguiente vuelta */ }
+    }
+
+    function pintarDetalle(v) {
+      const e = ESTADOS[v.estado];
+      $('#dv-tarjeta').className = `tcard tcard--${e.clase}`;
+      $('#dv-folio').textContent = v.folio;
+      $('#dv-estado').className = `st st--${e.clase}`;
+      $('#dv-estado').textContent = e.texto;
+      $('#dv-ruta').textContent = `${v.origen} → ${v.destino}`;
+      $('#dv-avance').style.setProperty('--p', `${v.avance}%`);
+
+      const entregado = v.estado === 'entregado';
+      const datos = [
+        ['Avance', `${v.avance} %`],
+        ['Operador', v.operador || 'Sin asignar'],
+        ['Unidad', v.placas ? `${v.placas} · ${v.marca_modelo}` : '—'],
+        ['Mercancía', `${v.mercancia} · ${fmtNumero.format(v.peso_kg)} kg`],
+        ['Cliente', v.cliente],
+        ['Salida', hora(v.salida)],
+        ['Traslado estimado', v.duracion_min ? `${duracionTexto(v.duracion_min)} · ${fmtNumero.format(v.distancia_km)} km` : '—'],
+        [entregado ? 'Entregado' : 'Llegada estimada', entregado ? hora(v.entregado_en) : hora(v.eta)],
+        ['Flete', fmtDinero.format(v.flete)]
+      ];
+      const filas = datos.map(([clave, valor]) => el('div', {}, el('dt', { text: clave }), el('dd', { text: valor })));
+      [['GPS de origen', v.gps_origen], ['GPS de destino', v.gps_destino]].forEach(([clave, enlace]) => {
+        if (enlace) filas.push(el('div', {}, el('dt', { text: clave }), el('dd', {}, el('a', { href: enlace, target: '_blank', rel: 'noopener', text: 'Abrir mapa ↗' }))));
+      });
+      $('#dv-datos').replaceChildren(...filas);
+
+      pintarAcciones(v);
+      $('#dv-eventos').replaceChildren(...v.eventos.map((ev) => el('li', { class: claseEvento(ev.tipo) },
+        el('b', { text: ev.descripcion }),
+        el('small', { text: `${hora(ev.creado_en)} · ${ev.usuario || 'Sistema'}` }))));
+    }
+
+    // Botones según el estado del viaje y el rol de quien lo ve
+    function accionesPara(v, usuario) {
+      const oficina = ['admin', 'capturista'].includes(usuario.rol);
+      const puedeMover = oficina || (usuario.rol === 'operador' && v.operador_id === usuario.id);
+      const acciones = [];
+
+      if (oficina && ['pendiente', 'asignado'].includes(v.estado)) {
+        acciones.push({ texto: v.estado === 'pendiente' ? 'Asignar operador' : 'Reasignar', irAsignar: true, principal: v.estado === 'pendiente' });
+      }
+      if (puedeMover && v.estado === 'asignado') acciones.push({ texto: 'Iniciar viaje', estado: 'en_ruta', principal: true });
+      if (puedeMover && v.estado === 'en_ruta') acciones.push({ texto: 'Reportar retraso', estado: 'retraso' });
+      if (puedeMover && v.estado === 'retraso') acciones.push({ texto: 'Recorrido normalizado', estado: 'en_ruta' });
+      if (puedeMover && ['en_ruta', 'retraso'].includes(v.estado)) acciones.push({ texto: 'Marcar entregado', estado: 'entregado', principal: true });
+      if (oficina && !['entregado', 'cancelado'].includes(v.estado)) {
+        acciones.push({ texto: 'Cancelar viaje', estado: 'cancelado', confirmar: `¿Cancelar el viaje ${v.folio}? Esta acción no se puede deshacer.` });
+      }
+      return acciones;
+    }
+
+    function pintarAcciones(v) {
+      const usuario = usuarioActual();
+      // Solo se redibujan si cambió el estado (el refresco de 10 s no debe quitar el botón bajo el dedo)
+      const contenedor = $('#dv-botones');
+      const clave = `${v.id}|${v.estado}|${v.operador_id}`;
+      if (contenedor.dataset.clave === clave) return;
+      contenedor.dataset.clave = clave;
+
+      const acciones = usuario ? accionesPara(v, usuario) : [];
+      $('#dv-acciones').hidden = !acciones.length;
+      $('#dv-nota-campo').hidden = !acciones.some((a) => a.estado);
+      $('#dv-botones').replaceChildren(...acciones.map((a) => el('button', {
+        type: 'button',
+        class: `btn ${a.principal ? 'btn--accent' : 'btn--ghost'}`,
+        onclick: (ev) => ejecutarAccion(v, a, ev.currentTarget)
+      }, a.texto)));
+    }
+
+    async function ejecutarAccion(v, accion, boton) {
+      if (accion.irAsignar) {
+        viajeParaAsignar = v.id;
+        $('#dlg-viaje').close();
+        if (location.hash === '#asignar') cargarSeccion();
+        else location.hash = '#asignar';
+        return;
+      }
+      if (accion.confirmar && !confirm(accion.confirmar)) return;
+
+      boton.disabled = true;
+      try {
+        const actualizado = await api(`/viajes/${v.id}/estado`, {
+          method: 'PATCH',
+          body: { estado: accion.estado, nota: $('#dv-nota').value }
+        });
+        $('#dv-nota').value = '';
+        mostrarAviso(`${actualizado.folio}: ${ESTADOS[actualizado.estado].texto.toLowerCase()}.`);
+        await refrescarDetalle();
+        cargarSeccion({ silencioso: true });
+      } catch (error) {
+        mostrarAviso(error.message);
+        boton.disabled = false;
+      }
+    }
+
+    function iniciarDetalle() {
+      const dialogo = $('#dlg-viaje');
+      $('#dv-cerrar').addEventListener('click', () => dialogo.close());
+      dialogo.addEventListener('close', () => {
+        viajeAbierto = null;
+        delete $('#dv-botones').dataset.clave;
       });
     }
 
     /* ---------- Nueva ruta ---------- */
-    function iniciarFormRuta() {
-      const form = $('#form-ruta');
-      if (!form) return;
-      revalidarAlEscribir(form);
-
-      // Fecha de salida sugerida: mañana a las 13:00
+    // Fecha de salida sugerida: mañana a las 13:00
+    function fijarSalidaSugerida(form) {
       const manana = new Date();
       manana.setDate(manana.getDate() + 1);
       manana.setHours(13, 0, 0, 0);
       const local = new Date(manana.getTime() - manana.getTimezoneOffset() * 60000);
       form.salida.value = local.toISOString().slice(0, 16);
+    }
 
-      // Vista previa: toma la ciudad (último tramo después de la coma)
-      const ciudad = (texto) => (texto.split(',').pop().trim() || '—');
+    // 135 → "2 h 15 min"
+    function duracionTexto(minutos) {
+      if (!minutos && minutos !== 0) return '—';
+      const h = Math.floor(minutos / 60);
+      const m = minutos % 60;
+      return h ? `${h} h${m ? ` ${m} min` : ''}` : `${m} min`;
+    }
+
+    /* Mapa real de la vista previa (Leaflet + OpenStreetMap) */
+    let mapaRuta = null;
+    let capaRuta = null;
+
+    function dibujarRuta(ruta) {
+      if (!window.L) return; // sin internet Leaflet no carga: se queda el trazo esquemático
+      const contenedor = $('#mapa-ruta');
+      if (!mapaRuta) {
+        contenedor.replaceChildren();
+        mapaRuta = L.map(contenedor, { zoomControl: false, scrollWheelZoom: false });
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 18,
+          attribution: '© OpenStreetMap'
+        }).addTo(mapaRuta);
+      }
+
+      const color = (variable) => getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+      const punto = (lugar, relleno, texto) => L.circleMarker([lugar.lat, lugar.lon], {
+        radius: 7, color: '#fff', weight: 2, fillColor: relleno, fillOpacity: 1
+      }).bindTooltip(texto);
+
+      capaRuta?.remove();
+      capaRuta = L.layerGroup([
+        L.polyline(ruta.trazo, { color: color('--accent'), weight: 5, opacity: .9 }),
+        punto(ruta.origen, color('--go'), 'Origen'),
+        punto(ruta.destino, color('--accent'), 'Destino')
+      ]).addTo(mapaRuta);
+      mapaRuta.invalidateSize();
+      mapaRuta.fitBounds(L.latLngBounds(ruta.trazo), { padding: [24, 24] });
+    }
+
+    function iniciarFormRuta() {
+      const form = $('#form-ruta');
+      if (!form) return;
+      revalidarAlEscribir(form);
+      fijarSalidaSugerida(form);
+
+      // Vista previa con la ciudad (último tramo después de la coma)
       const vista = $('#pv-ruta');
       const actualizarVista = () => {
         vista.textContent = `${ciudad(form.origen.value)} → ${ciudad(form.destino.value)}`;
@@ -711,35 +1261,402 @@
       form.destino.addEventListener('input', actualizarVista);
       actualizarVista();
 
-      form.addEventListener('submit', (e) => {
+      // Distancia y tiempo de traslado: se calculan cuando el usuario deja de escribir
+      const nota = $('#pv-nota');
+      let estimacion = null;
+      let ultimaConsulta = '';
+      let temporizador;
+
+      const avisar = (texto, esError = false) => {
+        nota.textContent = texto;
+        nota.classList.toggle('es-error', esError);
+      };
+
+      const actualizarLlegada = () => {
+        const salida = new Date(form.salida.value);
+        $('#pv-llegada').textContent = estimacion && !Number.isNaN(salida.getTime())
+          ? hora(new Date(salida.getTime() + estimacion.duracion_min * 60000))
+          : '—';
+      };
+
+      const limpiar = (texto) => {
+        estimacion = null;
+        ultimaConsulta = '';
+        $('#pv-distancia').textContent = '—';
+        $('#pv-tiempo').textContent = '—';
+        actualizarLlegada();
+        avisar(texto);
+      };
+
+      const calcular = async () => {
+        const origen = form.origen.value.trim();
+        const destino = form.destino.value.trim();
+        if (origen.length < 3 || destino.length < 3) {
+          limpiar('Escribe origen y destino para calcular el recorrido.');
+          return;
+        }
+
+        const consulta = new URLSearchParams({
+          origen, destino, gps_origen: form.gpsOrigen.value.trim(), gps_destino: form.gpsDestino.value.trim()
+        }).toString();
+        if (consulta === ultimaConsulta) return;
+        ultimaConsulta = consulta;
+        avisar('Calculando la ruta…');
+
+        try {
+          const ruta = await api(`/rutas/estimar?${consulta}`);
+          if (consulta !== ultimaConsulta) return; // llegó tarde: ya se escribió otra dirección
+          estimacion = ruta;
+          $('#pv-distancia').textContent = `${fmtNumero.format(ruta.distancia_km)} km`;
+          $('#pv-tiempo').textContent = duracionTexto(ruta.duracion_min);
+          actualizarLlegada();
+          const aproximados = [['del origen', ruta.origen], ['del destino', ruta.destino]].filter(([, lugar]) => lugar.aproximado).map(([nombre]) => nombre);
+          avisar(`Ruta por carretera de OpenStreetMap. En auto: ${duracionTexto(ruta.duracion_auto_min)}; en camión se estima un 30 % más.` +
+            (aproximados.length ? ` No se ubicó el punto exacto ${aproximados.join(' ni ')}: se usó la ciudad (agrega el enlace GPS para precisar).` : ''));
+          dibujarRuta(ruta);
+        } catch (error) {
+          if (consulta !== ultimaConsulta) return;
+          limpiar(error.message);
+          ultimaConsulta = consulta; // no repetir la misma consulta fallida hasta que cambie algo
+          nota.classList.add('es-error');
+        }
+      };
+
+      const programarCalculo = () => {
+        clearTimeout(temporizador);
+        temporizador = setTimeout(calcular, 900);
+      };
+      ['origen', 'destino', 'gpsOrigen', 'gpsDestino'].forEach((campo) => form[campo].addEventListener('input', programarCalculo));
+      form.salida.addEventListener('input', actualizarLlegada);
+
+      // Al entrar a la sección: calcula con lo ya escrito y ajusta el mapa (estaba oculto)
+      window.addEventListener('hashchange', () => {
+        if (location.hash !== '#ruta') return;
+        mapaRuta?.invalidateSize();
+        if (usuarioActual() && esOficina()) programarCalculo();
+      });
+      if (location.hash === '#ruta' && usuarioActual() && esOficina()) programarCalculo();
+
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (!validarFormulario(form)) return;
-        location.hash = '#asignar';
-        mostrarAviso('Ruta TRZ-0143 guardada. Ahora elige operador y unidad.');
+
+        const boton = $('button[type="submit"]', form);
+        boton.disabled = true;
+        try {
+          const nuevo = await api('/viajes', {
+            method: 'POST',
+            body: {
+              origen: form.origen.value,
+              destino: form.destino.value,
+              gps_origen: form.gpsOrigen.value,
+              gps_destino: form.gpsDestino.value,
+              mercancia: form.mercancia.value,
+              peso_kg: form.peso.value,
+              num_unidades: form.unidades.value,
+              flete: form.flete.value || 0,
+              cliente: form.cliente.value,
+              salida: new Date(form.salida.value).toISOString()
+            }
+          });
+          form.reset();
+          fijarSalidaSugerida(form);
+          actualizarVista();
+          limpiar('Escribe origen y destino para calcular el recorrido.');
+          viajeParaAsignar = nuevo.id;
+          location.hash = '#asignar';
+          mostrarAviso(`Ruta ${nuevo.folio} guardada. Ahora elige operador y unidad.`);
+        } catch (error) {
+          mostrarAviso(error.message);
+        } finally {
+          boton.disabled = false;
+        }
       });
     }
 
     /* ---------- Asignación ---------- */
-    function iniciarAsignacion() {
-      const resumen = $('#res-operador');
-      $$('input[name="op"]').forEach((radio) => {
-        radio.addEventListener('change', () => { resumen.textContent = radio.value; });
-      });
+    let viajeParaAsignar = null;
+    let datosAsignacion = { viajes: [], operadores: [], unidades: [] };
 
-      $('#confirmar-viaje')?.addEventListener('click', () => {
-        const elegido = $('input[name="op"]:checked');
-        mostrarAviso(`Viaje confirmado. Se notificó a ${elegido ? elegido.value : 'el operador'} en su reloj.`);
-      });
+    async function cargarAsignacion() {
+      const [viajes, operadores, unidades] = await Promise.all([
+        api('/viajes?estado=pendiente,asignado'), api('/flota/operadores'), api('/flota/unidades')
+      ]);
+      // Primero los pendientes, luego los que ya tienen operador pero no salen
+      viajes.sort((a, b) => (a.estado === 'pendiente' ? 0 : 1) - (b.estado === 'pendiente' ? 0 : 1));
+      datosAsignacion = { viajes, operadores, unidades };
 
-      // Botones de funciones aún no disponibles
-      $$('[data-aviso]').forEach((b) => b.addEventListener('click', () => mostrarAviso(b.dataset.aviso)));
+      const select = $('#as-viaje');
+      select.replaceChildren(...viajes.map((v) => el('option', {
+        value: v.id,
+        text: `${v.folio} · ${ciudad(v.origen)} → ${ciudad(v.destino)} · ${ESTADOS[v.estado].texto}`
+      })));
+      if (viajes.some((v) => v.id === viajeParaAsignar)) select.value = viajeParaAsignar;
+
+      const hayViajes = viajes.length > 0;
+      $('#as-vacio').hidden = hayViajes;
+      select.closest('.f').hidden = !hayViajes;
+      $('#confirmar-viaje').disabled = !hayViajes;
+      mostrarViajeElegido();
     }
 
-    /* ---------- PWA: funcionamiento sin conexión ---------- */
+    const viajeElegido = () => datosAsignacion.viajes.find((v) => v.id === Number($('#as-viaje').value));
+
+    function mostrarViajeElegido() {
+      const v = viajeElegido();
+      $('#as-folio').textContent = v?.folio || '—';
+      $('#as-ruta').textContent = v ? `${ciudad(v.origen)} → ${ciudad(v.destino)}` : '—';
+      $('#res-origen').textContent = v?.origen || '—';
+      $('#res-destino').textContent = v?.destino || '—';
+      $('#res-mercancia').textContent = v?.mercancia || '—';
+      $('#res-peso').textContent = v ? `${fmtNumero.format(v.peso_kg)} kg` : '—';
+      $('#res-flete').textContent = v ? fmtDinero.format(v.flete) : '—';
+      $('#res-salida').textContent = v ? hora(v.salida) : '—';
+      pintarOperadores(v);
+      pintarUnidades(v);
+    }
+
+    function pintarOperadores(viaje) {
+      const { operadores } = datosAsignacion;
+      const lista = $('#as-operadores');
+      const ocupado = (o) => o.viaje_activo && o.viaje_activo !== viaje?.folio;
+      $('#as-op-total').textContent = `${operadores.filter((o) => !ocupado(o)).length} disponibles de ${operadores.length}`;
+
+      if (!operadores.length) {
+        lista.replaceChildren(el('p', { class: 'empty', text: 'No hay operadores. Regístralos en Personal y roles con el rol Operador.' }));
+      } else {
+        lista.replaceChildren(...operadores.map((o) => el('label', {},
+          el('input', { type: 'radio', name: 'op', value: o.id, 'data-nombre': o.nombre, disabled: ocupado(o), checked: viaje?.operador_id === o.id }),
+          el('span', { class: 'av', text: iniciales(o.nombre) }),
+          el('span', {}, el('b', { text: o.nombre }), el('small', { text: `${o.viajes_mes} viaje${o.viajes_mes === 1 ? '' : 's'} este mes` })),
+          el('span', { class: 'muted mono', text: ocupado(o) ? o.viaje_activo : '' }),
+          el('span', { class: `st ${ocupado(o) ? 'st--wait' : 'st--go'}`, text: ocupado(o) ? 'Ocupado' : 'Libre' }))));
+      }
+      // Si no hay uno elegido, se propone el primero libre
+      if (!$('input[name="op"]:checked')) {
+        const primero = $('input[name="op"]:not(:disabled)');
+        if (primero) primero.checked = true;
+      }
+      $('#res-operador').textContent = $('input[name="op"]:checked')?.dataset.nombre || '—';
+    }
+
+    function pintarUnidades(viaje) {
+      const select = $('#as-unidad');
+      const usables = datosAsignacion.unidades.filter((u) => u.estado === 'disponible' || u.id === viaje?.unidad_id);
+      select.replaceChildren(...usables.map((u) => {
+        const noAlcanza = viaje && viaje.peso_kg > u.capacidad_kg;
+        return el('option', {
+          value: u.id,
+          disabled: noAlcanza,
+          text: `${u.placas} · ${u.marca_modelo}${noAlcanza ? ' (no soporta el peso)' : ''}`
+        });
+      }));
+      if (!usables.length) select.replaceChildren(el('option', { value: '', text: 'No hay unidades disponibles' }));
+
+      const preferida = usables.find((u) => u.id === viaje?.unidad_id) || usables.find((u) => !(viaje && viaje.peso_kg > u.capacidad_kg));
+      if (preferida) {
+        select.value = preferida.id;
+      } else if (usables.length && viaje) {
+        select.prepend(el('option', { value: '', text: `Ninguna unidad libre soporta ${fmtNumero.format(viaje.peso_kg)} kg` }));
+        select.value = '';
+      }
+      mostrarUnidad();
+    }
+
+    function mostrarUnidad() {
+      const u = datosAsignacion.unidades.find((x) => x.id === Number($('#as-unidad').value));
+      const datos = u ? [
+        ['Marca y modelo', u.marca_modelo], ['Año', u.anio],
+        ['Capacidad', `${fmtNumero.format(u.capacidad_kg)} kg`], ['Póliza de seguro', u.poliza || '—']
+      ] : [];
+      $('#as-unidad-info').replaceChildren(...datos.map(([k, v]) => el('div', {}, el('dt', { text: k }), el('dd', { text: v }))));
+      $('#res-unidad').textContent = u ? u.placas : '—';
+    }
+
+    function iniciarAsignacion() {
+      $('#as-viaje').addEventListener('change', () => {
+        viajeParaAsignar = Number($('#as-viaje').value);
+        mostrarViajeElegido();
+      });
+      $('#as-unidad').addEventListener('change', mostrarUnidad);
+      $('#as-operadores').addEventListener('change', (e) => {
+        $('#res-operador').textContent = e.target.dataset.nombre || '—';
+      });
+
+      $('#confirmar-viaje').addEventListener('click', async (e) => {
+        const viaje = viajeElegido();
+        const operador = $('input[name="op"]:checked');
+        const unidad = Number($('#as-unidad').value);
+        if (!viaje || !operador || !unidad) {
+          mostrarAviso('Elige un viaje, un operador y una unidad.');
+          return;
+        }
+
+        const boton = e.currentTarget;
+        boton.disabled = true;
+        try {
+          const v = await api(`/viajes/${viaje.id}/asignar`, {
+            method: 'PATCH',
+            body: { operador_id: Number(operador.value), unidad_id: unidad }
+          });
+          viajeParaAsignar = null;
+          location.hash = '#monitoreo';
+          mostrarAviso(`${v.folio} asignado a ${v.operador} con la unidad ${v.placas}.`);
+        } catch (error) {
+          mostrarAviso(error.message);
+        } finally {
+          boton.disabled = false;
+        }
+      });
+    }
+
+    /* ---------- Personal y roles ---------- */
+    function pintarUsuarios(usuarios) {
+      $('#tabla-usuarios').replaceChildren(...usuarios.map((u) => {
+        const rol = ROLES[u.rol] || { nombre: u.rol, clase: '', dispositivos: '—' };
+        return el('tr', {},
+          el('td', {}, el('b', { text: u.nombre })),
+          el('td', { class: 'muted', text: u.correo }),
+          el('td', {}, el('span', { class: `role ${rol.clase}`, text: rol.nombre })),
+          el('td', { text: rol.dispositivos }));
+      }));
+
+      $$('[data-kpi]').forEach((b) => {
+        b.textContent = usuarios.filter((u) => u.rol === b.dataset.kpi).length;
+      });
+      $('#total-usuarios').textContent = `${usuarios.length} registrado${usuarios.length === 1 ? '' : 's'}`;
+    }
+
+    async function cargarUsuarios() {
+      try {
+        pintarUsuarios(await api('/users'));
+      } catch (error) {
+        $('#tabla-usuarios').replaceChildren(el('tr', {}, el('td', { colspan: 4, class: 'muted', text: error.message })));
+        $('#total-usuarios').textContent = '';
+      }
+    }
+
+    function iniciarPersonal() {
+      const dialogo = $('#dlg-usuario');
+      const form = $('#form-usuario');
+      const error = $('#err-usuario');
+      if (!dialogo || !form) return;
+      revalidarAlEscribir(form);
+
+      $('#btn-nuevo-usuario').addEventListener('click', () => {
+        form.reset();
+        $$('[aria-invalid]', form).forEach((c) => c.removeAttribute('aria-invalid'));
+        $$('.f .err', form).forEach((e) => e.remove());
+        error.hidden = true;
+        dialogo.showModal();
+      });
+      $('#cancelar-usuario').addEventListener('click', () => dialogo.close());
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!validarFormulario(form)) return;
+
+        const boton = $('button[type="submit"]', form);
+        boton.disabled = true;
+        error.hidden = true;
+        try {
+          const nuevo = await api('/users', {
+            method: 'POST',
+            body: {
+              nombre: form.nombre.value,
+              correo: form.correo.value,
+              contraseña: form.clave.value,
+              rol: form.rol.value
+            }
+          });
+          dialogo.close();
+          mostrarAviso(`Usuario ${nuevo.nombre} registrado como ${ROLES[nuevo.rol].nombre}.`);
+          cargarUsuarios();
+        } catch (err) {
+          error.textContent = err.message;
+          error.hidden = false;
+        } finally {
+          boton.disabled = false;
+        }
+      });
+    }
+
+    /* ---------- PWA: instalación ---------- */
+    let eventoInstalacion = null;
+
+    function iniciarInstalacion() {
+      const botones = $$('.js-instalar');
+      const mostrarBotones = (visible) => botones.forEach((b) => { b.hidden = !visible; });
+
+      // El navegador avisa que la app se puede instalar: mostramos nuestro propio botón
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        eventoInstalacion = e;
+        mostrarBotones(true);
+      });
+
+      botones.forEach((b) => b.addEventListener('click', async () => {
+        if (!eventoInstalacion) return;
+        eventoInstalacion.prompt();
+        await eventoInstalacion.userChoice;
+        eventoInstalacion = null;
+        mostrarBotones(false);
+      }));
+
+      window.addEventListener('appinstalled', () => {
+        mostrarBotones(false);
+        mostrarAviso('Trazzo quedó instalada. Ábrela desde tu pantalla de inicio.');
+      });
+    }
+
+    /* ---------- PWA: aviso de conexión ---------- */
+    function iniciarAvisoConexion() {
+      const aviso = $('#aviso-offline');
+      const actualizar = () => { aviso.hidden = navigator.onLine; };
+
+      window.addEventListener('offline', actualizar);
+      window.addEventListener('online', () => {
+        actualizar();
+        mostrarAviso('Conexión recuperada. Actualizando datos…');
+        cargarSeccion({ silencioso: true });
+      });
+      actualizar();
+    }
+
+    /* ---------- PWA: Service Worker y aviso de nueva versión ---------- */
     function registrarServiceWorker() {
-      if (!('serviceWorker' in navigator) || location.protocol !== 'https:' && location.hostname !== 'localhost') return;
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(() => { /* sin soporte en este hospedaje */ });
+      const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+      if (!('serviceWorker' in navigator) || (location.protocol !== 'https:' && !local)) return;
+
+      // Si la página ya estaba controlada, al activarse la versión nueva se recarga una vez
+      const habiaVersion = Boolean(navigator.serviceWorker.controller);
+      let recargando = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!habiaVersion || recargando) return;
+        recargando = true;
+        location.reload();
+      });
+
+      const ofrecerActualizacion = (worker) => {
+        $('#aviso-version').hidden = false;
+        $('#btn-actualizar').onclick = () => worker.postMessage('actualizar');
+      };
+
+      window.addEventListener('load', async () => {
+        try {
+          const registro = await navigator.serviceWorker.register('sw.js');
+          if (registro.waiting && navigator.serviceWorker.controller) ofrecerActualizacion(registro.waiting);
+
+          registro.addEventListener('updatefound', () => {
+            const nuevo = registro.installing;
+            nuevo.addEventListener('statechange', () => {
+              if (nuevo.state === 'installed' && navigator.serviceWorker.controller) ofrecerActualizacion(nuevo);
+            });
+          });
+
+          // Mientras la app está abierta, busca versiones nuevas cada hora
+          setInterval(() => registro.update(), 60 * 60 * 1000);
+        } catch { /* sin soporte en este hospedaje */ }
       });
     }
 
@@ -751,6 +1668,11 @@
       iniciarLogin();
       iniciarFormRuta();
       iniciarAsignacion();
+      iniciarPersonal();
+      iniciarDetalle();
+      iniciarInstalacion();
+      iniciarAvisoConexion();
+      iniciarNavegacionConDatos();
     });
 
     registrarServiceWorker();
