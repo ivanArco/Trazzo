@@ -5,7 +5,11 @@
 
 CREATE DATABASE IF NOT EXISTS trazzo CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 USE trazzo;
+SELECT * FROM trazzo.usuarios;
+SELECT * FROM trazzo.unidades;
+SELECT * FROM trazzo.viajes;
 
+DELETE FROM usuarios WHERE id = 9;
 CREATE TABLE IF NOT EXISTS usuarios (
   id INT NOT NULL AUTO_INCREMENT,
   nombre VARCHAR(100) NOT NULL,
@@ -53,8 +57,10 @@ CREATE TABLE IF NOT EXISTS viajes (
   creado_por INT NULL,
   creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   entregado_en DATETIME NULL,
+  rastreo_token VARCHAR(43) NULL,            -- enlace público de rastreo para el cliente (QR)
   PRIMARY KEY (id),
   UNIQUE KEY folio (folio),
+  UNIQUE KEY rastreo_token (rastreo_token),
   KEY estado (estado),
   CONSTRAINT fk_viaje_operador FOREIGN KEY (operador_id) REFERENCES usuarios (id) ON DELETE SET NULL,
   CONSTRAINT fk_viaje_unidad FOREIGN KEY (unidad_id) REFERENCES unidades (id) ON DELETE SET NULL,

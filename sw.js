@@ -1,10 +1,11 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v2.4';
+const CACHE = 'trazzo-v2.6';
 
 const ARCHIVOS = [
   './',
   './index.html',
+  './rastreo.html',
   './css/styles.css',
   './manifest.json',
   './img/patio-carga.svg',
@@ -46,7 +47,10 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
 
   if (request.mode === 'navigate') {
-    e.respondWith(fetch(request).catch(() => caches.match('./index.html')));
+    // Sin conexión: la misma página guardada (rastreo.html?t=... se busca sin el ?t=) o, si no, la app
+    e.respondWith(fetch(request).catch(() =>
+      caches.match(request, { ignoreSearch: true }).then((pagina) => pagina || caches.match('./index.html'))
+    ));
     return;
   }
 

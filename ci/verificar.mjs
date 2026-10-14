@@ -33,6 +33,7 @@ async function probar(url, revisar) {
 }
 
 await probar('/', (t) => t.includes('<title>Trazzo'));
+await probar('/rastreo.html', (t) => t.includes('Rastreo de tu envío'));
 const html = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8');
 const locales = [...html.matchAll(/\b(?:src|href|poster)="([^"#]+)"/g)]
   .map((m) => m[1]).filter((r) => !/^(https?:|mailto:|tel:|data:|\/\/)/.test(r));

@@ -1351,6 +1351,240 @@ body:has(.screen:target) .login {
   bottom: 80px;
 }
 
+/* ---------- 15c. Rastreo con QR y asistente con IA ---------- */
+.dv-rastreo {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 14px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+}
+
+.dv-rastreo__qr {
+  width: 150px;
+  height: 150px;
+  border-radius: 10px;
+  background: #fff;
+  padding: 6px;
+}
+
+.dv-rastreo__info { display: grid; gap: 8px; min-width: 0; }
+.dv-rastreo__info .actions { justify-content: flex-start; }
+
+.dv-rastreo__url {
+  font-size: .78rem;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+/* Botón flotante y panel del asistente */
+.asis-boton {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 140;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 600 .95rem Inter, system-ui, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+
+.asis-boton[aria-expanded="true"] { filter: brightness(.92); }
+
+.asis-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  z-index: 140;
+  width: min(420px, calc(100% - 32px));
+  height: min(600px, calc(100% - 120px));
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .45);
+  overflow: hidden;
+}
+
+.asis-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.asis-panel__head h2 {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .98rem;
+  margin: 0;
+}
+
+.asis-panel__head h2 svg { color: var(--accent); }
+
+.asis-panel__head small {
+  font-size: .65rem;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+
+.asis-mensajes {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+
+.asis-msg {
+  max-width: 88%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: .9rem;
+}
+
+.asis-msg--usuario {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  border-bottom-right-radius: 4px;
+}
+
+.asis-msg--asistente {
+  align-self: flex-start;
+  background: var(--panel-2);
+  border-bottom-left-radius: 4px;
+}
+
+.asis-pensando { color: var(--muted); animation: parpadeo 1.2s infinite; }
+.asis-msg .err,
+.asis-propuesta .err { color: var(--alert); }
+
+@keyframes parpadeo {
+  50% { opacity: .4; }
+}
+
+.asis-propuesta {
+  display: grid;
+  gap: 6px;
+  white-space: normal;
+  min-width: 240px;
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+}
+
+.asis-propuesta ul { margin: 0; padding-left: 18px; font-size: .85rem; }
+.asis-propuesta .actions { justify-content: flex-start; }
+
+.asis-sugerencias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 10px;
+}
+
+.asis-chip {
+  font: inherit;
+  font-size: .78rem;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+
+.asis-chip:hover { border-color: var(--accent); }
+
+.asis-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.asis-form textarea {
+  flex: 1;
+  resize: none;
+  font: inherit;
+  font-size: .9rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+}
+
+.asis-form textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+@media (max-width: 560px) {
+  .dv-rastreo { grid-template-columns: 1fr; justify-items: center; }
+  .asis-boton { right: 16px; bottom: 16px; }
+  .asis-boton span { display: none; }
+  .asis-boton { padding: 0 14px; }
+  .asis-panel { right: 16px; bottom: 76px; height: calc(100% - 100px); }
+}
+
+/* ---------- 15d. Historial y flota ---------- */
+.kpis--3 { grid-template-columns: repeat(3, 1fr); }
+
+.hi-filtros {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.hi-filtros__botones { display: flex; gap: 8px; }
+.hi-filtros > * { min-width: 0; } /* sin esto, los campos de fecha se salen del panel */
+
+.hi-paginas {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.tabla-acciones {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .hi-filtros { grid-template-columns: 1fr 1fr; }
+  .hi-filtros > :first-child,
+  .hi-filtros__botones { grid-column: 1 / -1; }
+}
+
+@media (max-width: 560px) {
+  .hi-filtros { grid-template-columns: 1fr; }
+  .hi-filtros__botones > * { flex: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .screen:target,
   .live {
@@ -1366,6 +1600,8 @@ body:has(.screen:target) .login {
 
 /* Laptops: se oculta el buscador ampliado */
 @media (max-width: 1440px) {
+  .nav__links a { padding: 0 9px; }
+
   .nav__user div,
   .nav .clock {
     display: none;

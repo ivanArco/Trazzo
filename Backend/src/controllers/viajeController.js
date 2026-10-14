@@ -1,4 +1,5 @@
 import * as viajeService from '../services/viajeService.js';
+import * as rastreoService from '../services/rastreoService.js';
 
 export const listar = async (req, res) => {
   res.json(await viajeService.listar(req.query, req.usuario));
@@ -26,4 +27,22 @@ export const asignar = async (req, res) => {
 
 export const cambiarEstado = async (req, res) => {
   res.json(await viajeService.cambiarEstado(Number(req.params.id), req.body, req.usuario));
+};
+
+// El origen del frontend (encabezado Origin) sirve para armar el enlace del QR
+export const activarRastreo = async (req, res) => {
+  res.json(await rastreoService.activar(Number(req.params.id), req.get('origin')));
+};
+
+export const desactivarRastreo = async (req, res) => {
+  res.json(await rastreoService.desactivar(Number(req.params.id)));
+};
+
+export const historial = async (req, res) => {
+  if (req.query.formato === 'csv') {
+    const hoy = new Date().toISOString().slice(0, 10);
+    res.attachment(`trazzo-viajes-${hoy}.csv`).type('text/csv; charset=utf-8');
+    return res.send(await viajeService.historialCsv(req.query, req.usuario));
+  }
+  res.json(await viajeService.historial(req.query, req.usuario));
 };

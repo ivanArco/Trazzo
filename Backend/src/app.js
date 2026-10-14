@@ -5,8 +5,13 @@ import userRoutes from './routes/userRouter.js';
 import viajeRoutes from './routes/viajeRouter.js';
 import flotaRoutes from './routes/flotaRouter.js';
 import rutaRoutes from './routes/rutaRouter.js';
+import rastreoRoutes from './routes/rastreoRouter.js';
+import asistenteRoutes from './routes/asistenteRouter.js';
 
 const app = express();
+
+// Rastreo público para clientes: va antes del CORS restringido porque lo abre cualquier celular
+app.use('/api/rastreo', rastreoRoutes);
 
 // Solo los orígenes del frontend listados en CORS_ORIGIN pueden llamar a la API
 const origenes = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
@@ -20,6 +25,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/viajes', viajeRoutes);
 app.use('/api/flota', flotaRoutes);
 app.use('/api/rutas', rutaRoutes);
+app.use('/api/asistente', asistenteRoutes);
 
 // Ruta inexistente
 app.use((req, res) => {

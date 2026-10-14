@@ -101,6 +101,28 @@ llegada según la salida. Si se pega un enlace de Google Maps en los campos GPS,
 La distancia y el tiempo se guardan con el viaje y sirven para estimar la hora de llegada en el seguimiento.
 Los servidores públicos de OpenStreetMap son para uso moderado: los resultados se guardan en caché en el backend.
 
+**Rastreo público con QR**
+
+En el seguimiento de un viaje, «Compartir rastreo» crea un enlace secreto (token aleatorio de 256 bits) y su
+código QR, generado en el servidor. El cliente lo abre en su celular (`rastreo.html?t=...`) sin cuenta y ve el
+avance, el camión sobre el mapa, la hora de llegada y el historial, actualizado cada 15 s. La vista pública
+oculta datos internos (flete, placas, notas, nombres del personal) y el enlace se puede desactivar; caduca
+3 días después de la entrega. Para escanear el QR con un celular en el mismo wifi, el backend usa la IP local
+de la computadora; si publicas el frontend, pon su dirección en `PUBLIC_URL` (`.env`).
+
+**Asistente con IA (Claude)**
+
+El botón «Asistente» abre un chat donde se pregunta en lenguaje natural («¿qué viajes van con retraso?»,
+«registra un viaje de Puebla a Oaxaca mañana a las 8»). El backend (`asistenteService.js`) usa el modelo
+`claude-opus-5-5` con herramientas que consultan los datos reales respetando el rol de quien pregunta.
+Las acciones que cambian datos solo se **proponen**: aparecen como tarjetas con «Confirmar» y, al confirmar,
+el frontend llama a los endpoints normales (mismas validaciones y permisos). Requiere `ANTHROPIC_API_KEY`
+en `.env` (tiene costo por uso; máximo 15 preguntas por minuto por usuario). Sin clave, el resto de la app
+funciona igual. Si los filtros de seguridad de Anthropic rechazan una petición, la API reintenta
+automáticamente con otro modelo (`fallbacks: "default"`).
+
+**Seguridad extra:** el inicio de sesión admite 10 intentos fallidos cada 15 minutos por IP.
+
 **Endpoints**
 
 | Método | Ruta | Acceso | Descripción |
@@ -112,13 +134,20 @@ Los servidores públicos de OpenStreetMap son para uso moderado: los resultados 
 | POST | `/api/users` | Administrador | `{ nombre, correo, contraseña, rol }` |
 | GET | `/api/viajes` | Con sesión | Viajes activos y entregados recientes (`?estado=pendiente,asignado`). El operador solo ve los suyos |
 | GET | `/api/viajes/:id` | Con sesión | Viaje con su historial |
+| GET | `/api/viajes/historial` | Con sesión | Todos los viajes: `?q=&estado=&desde=&hasta=&pagina=&por_pagina=`; con `&formato=csv` descarga para Excel |
 | GET | `/api/viajes/resumen` | Con sesión | KPIs del tablero y estado de la flota |
 | GET | `/api/viajes/eventos` | Con sesión | Actividad reciente |
 | POST | `/api/viajes` | Admin / capturista | Registrar ruta; el folio `TRZ-0000` se genera solo |
 | PATCH | `/api/viajes/:id/asignar` | Admin / capturista | `{ operador_id, unidad_id }` |
 | PATCH | `/api/viajes/:id/estado` | Admin / capturista / operador del viaje | `{ estado, nota }` |
-| GET | `/api/flota/unidades` | Admin / capturista | Camiones y su estado |
+| GET | `/api/flota/unidades` | Admin / capturista | Camiones, su estado, viaje que los ocupa y entregas |
+| POST | `/api/flota/unidades` | Admin / capturista | Agregar unidad `{ placas, marca_modelo, anio, capacidad_kg, poliza }` |
+| PATCH | `/api/flota/unidades/:id` | Admin / capturista | Editar datos o `{ estado: 'disponible' | 'taller' }` |
 | GET | `/api/flota/operadores` | Admin / capturista | Operadores, viaje activo y viajes del mes |
+| POST | `/api/viajes/:id/rastreo` | Admin / capturista | Activa el rastreo público → `{ url, qr_svg }` |
+| DELETE | `/api/viajes/:id/rastreo` | Admin / capturista | Desactiva el enlace (el QR deja de funcionar) |
+| GET | `/api/rastreo/:token` | **Público** | Avance del envío para el cliente (máx. 30 consultas/min por IP) |
+| POST | `/api/asistente` | Admin / capturista / operador | `{ mensajes: [{ rol, texto }] }` → `{ respuesta, propuestas }` |
 | GET | `/api/rutas/estimar` | Admin / capturista | `?origen=&destino=&gps_origen=&gps_destino=` → distancia, tiempo y trazo de la ruta |
 
 Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token en `Authorization: Bearer <token>`. Su dirección se configura en la constante `API_URL` de `index.html`.

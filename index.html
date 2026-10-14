@@ -46,6 +46,7 @@
     <symbol id="i-user" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></g></symbol>
     <symbol id="i-book" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5M9 8h6" /></g></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="2" width="12" height="20" rx="2.5" /><path d="M11 18h2" /></g></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></symbol>
     <symbol id="i-menu" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16" /></symbol>
     <symbol id="i-logo" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#12306b" /><path d="M120 150h272v58H286v184h-60V208H120z" fill="#fff" /><path d="M312 300h80l-40 70z" fill="#ff8a1f" /></symbol>
   </svg>
@@ -59,6 +60,8 @@
       <a href="#ruta" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-route" /></svg>Nueva ruta</a>
       <a href="#asignar" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Asignación<em id="nav-por-asignar" hidden></em></a>
       <a href="#monitoreo"><svg class="i" aria-hidden="true"><use href="#i-monitor" /></svg>Monitoreo</a>
+      <a href="#historial" data-rol="admin capturista operador"><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>Historial</a>
+      <a href="#flota" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Flota</a>
       <a href="#personal" data-rol="admin"><svg class="i" aria-hidden="true"><use href="#i-users" /></svg>Personal y roles</a>
       <a href="#guia"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg>Cómo funciona</a>
     </nav>
@@ -287,6 +290,94 @@
       </div>
     </section>
 
+    <!-- ===================== HISTORIAL DE VIAJES ===================== -->
+    <section class="screen" id="historial" aria-labelledby="t-historial">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Todos los viajes registrados</p>
+            <h1 id="t-historial">Historial de viajes</h1>
+          </div>
+          <button type="button" class="btn btn--ghost" id="hi-exportar"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg>Exportar a Excel (CSV)</button>
+        </header>
+
+        <form class="panel hi-filtros" id="form-historial" role="search" aria-label="Filtrar el historial de viajes">
+          <label class="f"><span>Buscar</span><input type="search" name="q" maxlength="80" placeholder="Folio, ciudad, cliente, operador, placas…"></label>
+          <label class="f"><span>Estado</span>
+            <select name="estado">
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="asignado">Asignado</option>
+              <option value="en_ruta">En ruta</option>
+              <option value="retraso">Retraso</option>
+              <option value="entregado">Entregado</option>
+              <option value="cancelado">Cancelado</option>
+            </select>
+          </label>
+          <label class="f"><span>Salida desde</span><input type="date" name="desde"></label>
+          <label class="f"><span>Salida hasta</span><input type="date" name="hasta"></label>
+          <div class="hi-filtros__botones">
+            <button type="reset" class="btn btn--ghost">Limpiar</button>
+            <button type="submit" class="btn btn--accent">Filtrar</button>
+          </div>
+        </form>
+
+        <div class="kpis kpis--3">
+          <article class="kpi"><small>Viajes encontrados</small><b id="hi-total">—</b><em>Con los filtros actuales</em></article>
+          <article class="kpi"><small>Flete</small><b id="hi-flete">—</b><em>MXN, sin contar cancelados</em></article>
+          <article class="kpi"><small>Kilómetros recorridos</small><b id="hi-km">—</b><em>De los viajes entregados</em></article>
+        </div>
+
+        <article class="panel">
+          <div class="table-wrap">
+            <table class="table" id="tabla-historial">
+              <thead><tr><th>Folio</th><th>Salida</th><th>Ruta</th><th>Cliente</th><th>Operador</th><th>Unidad</th><th>Flete</th><th>Estado</th></tr></thead>
+              <tbody id="tabla-historial-cuerpo">
+                <tr><td colspan="8" class="muted">Cargando historial…</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <nav class="hi-paginas" aria-label="Páginas del historial">
+            <button type="button" class="btn btn--ghost btn--sm" id="hi-anterior">← Anterior</button>
+            <span class="muted" id="hi-pagina" aria-live="polite">—</span>
+            <button type="button" class="btn btn--ghost btn--sm" id="hi-siguiente">Siguiente →</button>
+          </nav>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===================== FLOTA ===================== -->
+    <section class="screen" id="flota" aria-labelledby="t-flota">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Unidades de carga</p>
+            <h1 id="t-flota">Flota</h1>
+          </div>
+          <button type="button" class="btn btn--accent" id="btn-nueva-unidad"><svg class="i" aria-hidden="true"><use href="#i-plus" /></svg>Agregar unidad</button>
+        </header>
+
+        <div class="kpis">
+          <article class="kpi"><small>Disponibles</small><b class="c-green" id="fl-disponibles">—</b><em>Listas para asignar</em></article>
+          <article class="kpi"><small>En uso</small><b class="c-accent" id="fl-en-uso">—</b><em id="fl-en-uso-detalle">&nbsp;</em></article>
+          <article class="kpi"><small>En taller</small><b id="fl-taller">—</b><em>Fuera de servicio</em></article>
+          <article class="kpi"><small>Capacidad lista</small><b id="fl-capacidad">—</b><em>Toneladas en unidades disponibles</em></article>
+        </div>
+
+        <article class="panel">
+          <header class="panel__head"><h2>Unidades</h2><span class="muted" id="fl-total">—</span></header>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Placas</th><th>Marca y modelo</th><th>Año</th><th>Capacidad</th><th>Póliza</th><th>Estado</th><th>Entregas</th><th><span class="sr-only">Acciones</span></th></tr></thead>
+              <tbody id="tabla-unidades">
+                <tr><td colspan="8" class="muted">Cargando unidades…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <!-- ===================== PERSONAL Y ROLES ===================== -->
     <section class="screen" id="personal" aria-labelledby="t-personal">
       <div class="wrap">
@@ -498,6 +589,28 @@
   </dialog>
 
   <!-- Aviso flotante -->
+  <!-- ===================== AGREGAR / EDITAR UNIDAD ===================== -->
+  <dialog class="dialog" id="dlg-unidad" aria-labelledby="t-dlg-unidad">
+    <form class="form" id="form-unidad" novalidate>
+      <h2 id="t-dlg-unidad">Agregar unidad</h2>
+      <div class="cols">
+        <label class="f"><span>Placas</span><input name="placas" required minlength="5" placeholder="PUE-45-8K" class="mono" autocomplete="off"></label>
+        <label class="f"><span>Año</span><input name="anio" type="number" required min="1980" placeholder="2022" inputmode="numeric"></label>
+      </div>
+      <label class="f"><span>Marca y modelo</span><input name="marca_modelo" required list="lista-modelos" placeholder="Kenworth T680"></label>
+      <datalist id="lista-modelos"><option value="Kenworth T680"><option value="Freightliner Cascadia"><option value="International LT"><option value="Volvo VNL"><option value="Mercedes-Benz Actros"></datalist>
+      <div class="cols">
+        <label class="f"><span>Capacidad (kg)</span><input name="capacidad_kg" type="number" required min="500" step="100" placeholder="36000"></label>
+        <label class="f"><span>Póliza de seguro (opcional)</span><input name="poliza" placeholder="GNP-7781-2026" class="mono"></label>
+      </div>
+      <p class="err" id="err-unidad" role="alert" hidden></p>
+      <div class="dialog__acciones">
+        <button type="button" class="btn btn--ghost" id="cancelar-unidad">Cancelar</button>
+        <button type="submit" class="btn btn--accent">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- ===================== SEGUIMIENTO DE UN VIAJE ===================== -->
   <dialog class="dialog dialog--ancho" id="dlg-viaje" aria-labelledby="dv-ruta">
     <div class="tcard" id="dv-tarjeta">
@@ -510,6 +623,7 @@
       <label class="f" id="dv-nota-campo"><span>Nota (opcional)</span><input id="dv-nota" maxlength="150" placeholder="Ej. Tráfico en la caseta"></label>
       <div class="actions" id="dv-botones"></div>
     </div>
+    <div class="dv-rastreo" id="dv-rastreo" hidden></div>
     <h3 class="dv-titulo">Historial</h3>
     <ul class="feed" id="dv-eventos"></ul>
     <div class="actions"><button type="button" class="btn btn--ghost" id="dv-cerrar">Cerrar</button></div>
@@ -517,6 +631,22 @@
 
   <div class="banda banda--offline" id="aviso-offline" role="status" hidden>Sin conexión · se muestran los últimos datos guardados</div>
   <div class="banda banda--version" id="aviso-version" role="status" hidden>Hay una nueva versión de Trazzo <button type="button" class="btn btn--accent btn--sm" id="btn-actualizar">Actualizar</button></div>
+  <!-- ===================== ASISTENTE CON IA ===================== -->
+  <button type="button" class="asis-boton" id="asis-abrir" data-rol="admin capturista operador" hidden aria-controls="asis-panel" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-spark" /></svg><span>Asistente</span></button>
+  <section class="asis-panel" id="asis-panel" aria-labelledby="asis-titulo" hidden>
+    <header class="asis-panel__head">
+      <h2 id="asis-titulo"><svg class="i" aria-hidden="true"><use href="#i-spark" /></svg>Asistente Trazzo <small>IA</small></h2>
+      <button type="button" class="btn btn--ghost btn--sm" id="asis-nuevo" title="Empezar una conversación nueva">Nueva</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="asis-cerrar" aria-label="Cerrar asistente">✕</button>
+    </header>
+    <div class="asis-mensajes" id="asis-mensajes" aria-live="polite"></div>
+    <div class="asis-sugerencias" id="asis-sugerencias"></div>
+    <form class="asis-form" id="asis-form">
+      <textarea name="texto" rows="2" maxlength="2000" required placeholder="Pregunta o pide algo, por ejemplo: ¿qué viajes van con retraso?" aria-label="Mensaje para el asistente"></textarea>
+      <button type="submit" class="btn btn--accent btn--sm">Enviar</button>
+    </form>
+  </section>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <!-- ===================== JAVASCRIPT ===================== -->
   <script>
@@ -774,8 +904,9 @@
     }
 
     /* ---------- Conexión con la API (backend) ---------- */
-    // Dirección del backend. Cámbiala cuando lo publiques en internet.
-    const API_URL = 'http://localhost:3000/api';
+    // El backend corre en el puerto 3000 de la misma computadora (o de la misma red local).
+    // Cuando lo publiques en internet, cambia esta línea por su dirección.
+    const API_URL = `${location.protocol}//${location.hostname}:3000/api`;
 
     const ROLES = {
       admin: { nombre: 'Administrador', clase: 'role--admin', dispositivos: 'Web · TV' },
@@ -864,6 +995,8 @@
     function cerrarSesion() {
       sesion.borrar();
       cacheApi.borrar();
+      $('#asis-panel').hidden = true;
+      reiniciarAsistente();
       mostrarUsuario(null);
       location.hash = '#login';
     }
@@ -933,7 +1066,9 @@
       tablero: cargarTablero,
       monitoreo: cargarMonitoreo,
       asignar: cargarAsignacion,
-      personal: cargarUsuarios
+      personal: cargarUsuarios,
+      historial: cargarHistorial,
+      flota: cargarFlota
     };
 
     async function cargarSeccion({ silencioso = false } = {}) {
@@ -1077,6 +1212,7 @@
 
     async function abrirDetalle(id) {
       try {
+        if (viajeAbierto !== id) $('#dv-rastreo').hidden = true;
         viajeAbierto = id;
         $('#dv-nota').value = '';
         pintarDetalle(await api(`/viajes/${id}`));
@@ -1138,6 +1274,9 @@
       if (puedeMover && v.estado === 'en_ruta') acciones.push({ texto: 'Reportar retraso', estado: 'retraso' });
       if (puedeMover && v.estado === 'retraso') acciones.push({ texto: 'Recorrido normalizado', estado: 'en_ruta' });
       if (puedeMover && ['en_ruta', 'retraso'].includes(v.estado)) acciones.push({ texto: 'Marcar entregado', estado: 'entregado', principal: true });
+      if (oficina && v.estado !== 'cancelado') {
+        acciones.push({ texto: v.rastreo_activo ? 'Enlace de rastreo' : 'Compartir rastreo', rastreo: true });
+      }
       if (oficina && !['entregado', 'cancelado'].includes(v.estado)) {
         acciones.push({ texto: 'Cancelar viaje', estado: 'cancelado', confirmar: `¿Cancelar el viaje ${v.folio}? Esta acción no se puede deshacer.` });
       }
@@ -1148,7 +1287,7 @@
       const usuario = usuarioActual();
       // Solo se redibujan si cambió el estado (el refresco de 10 s no debe quitar el botón bajo el dedo)
       const contenedor = $('#dv-botones');
-      const clave = `${v.id}|${v.estado}|${v.operador_id}`;
+      const clave = `${v.id}|${v.estado}|${v.operador_id}|${v.rastreo_activo}`;
       if (contenedor.dataset.clave === clave) return;
       contenedor.dataset.clave = clave;
 
@@ -1162,7 +1301,60 @@
       }, a.texto)));
     }
 
+    /* Rastreo público: enlace + QR que el cliente abre en su celular sin cuenta */
+    async function mostrarRastreo(v, boton) {
+      boton.disabled = true;
+      try {
+        const { url, qr_svg: qr } = await api(`/viajes/${v.id}/rastreo`, { method: 'POST' });
+        const zona = $('#dv-rastreo');
+        const enRedLocal = /^https?:\/\/(10|172\.(1[6-9]|2\d|3[01])|192\.168)\./.test(url);
+        const copiar = async (ev) => {
+          try {
+            await navigator.clipboard.writeText(url);
+            ev.currentTarget.textContent = 'Copiado ✓';
+          } catch {
+            mostrarAviso('No se pudo copiar; selecciona el enlace a mano.');
+          }
+        };
+        const compartir = () => navigator.share({ title: `Rastreo ${v.folio} · Trazzo`, text: `Sigue tu envío ${v.folio} en vivo:`, url }).catch(() => {});
+        const desactivar = async () => {
+          if (!confirm('¿Desactivar el enlace? El QR que ya compartiste dejará de funcionar.')) return;
+          try {
+            await api(`/viajes/${v.id}/rastreo`, { method: 'DELETE' });
+            zona.hidden = true;
+            mostrarAviso('Enlace de rastreo desactivado.');
+            await refrescarDetalle();
+          } catch (error) {
+            mostrarAviso(error.message);
+          }
+        };
+
+        zona.replaceChildren(
+          el('img', { class: 'dv-rastreo__qr', alt: `Código QR para rastrear ${v.folio}`, src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qr)}` }),
+          el('div', { class: 'dv-rastreo__info' },
+            el('b', { text: 'Rastreo para el cliente' }),
+            el('small', { class: 'muted', text: 'Escanea el QR o comparte el enlace: verá el avance en vivo sin necesidad de cuenta.' }),
+            el('a', { class: 'dv-rastreo__url mono', href: url, target: '_blank', rel: 'noopener', text: url }),
+            enRedLocal && el('small', { class: 'muted', text: 'Enlace de red local: el celular debe estar conectado al mismo wifi que esta computadora.' }),
+            el('div', { class: 'actions' },
+              el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: copiar }, 'Copiar enlace'),
+              navigator.share && el('button', { type: 'button', class: 'btn btn--accent btn--sm', onclick: compartir }, 'Compartir'),
+              el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: desactivar }, 'Desactivar'))));
+        zona.hidden = false;
+        zona.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        await refrescarDetalle();
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        boton.disabled = false;
+      }
+    }
+
     async function ejecutarAccion(v, accion, boton) {
+      if (accion.rastreo) {
+        mostrarRastreo(v, boton);
+        return;
+      }
       if (accion.irAsignar) {
         viajeParaAsignar = v.id;
         $('#dlg-viaje').close();
@@ -1510,6 +1702,205 @@
       });
     }
 
+    /* ---------- Historial de viajes ---------- */
+    const POR_PAGINA_HISTORIAL = 15;
+    let paginaHistorial = 1;
+
+    function consultaHistorial() {
+      const form = $('#form-historial');
+      const consulta = new URLSearchParams();
+      ['q', 'estado', 'desde', 'hasta'].forEach((campo) => {
+        const valor = form[campo].value.trim();
+        if (valor) consulta.set(campo, valor);
+      });
+      return consulta;
+    }
+
+    async function cargarHistorial() {
+      const consulta = consultaHistorial();
+      consulta.set('pagina', paginaHistorial);
+      consulta.set('por_pagina', POR_PAGINA_HISTORIAL);
+      const r = await api(`/viajes/historial?${consulta}`);
+
+      $('#hi-total').textContent = fmtNumero.format(r.total);
+      $('#hi-flete').textContent = fmtDineroCorto.format(r.flete);
+      $('#hi-km').textContent = `${fmtNumero.format(Math.round(r.km))} km`;
+
+      const filas = r.viajes.map((v) => {
+        const e = ESTADOS[v.estado];
+        return el('tr', { class: 'fila-viaje', tabindex: 0, onclick: () => abrirDetalle(v.id), onkeydown: (ev) => { if (ev.key === 'Enter') abrirDetalle(v.id); } },
+          el('td', { class: 'mono', text: v.folio }),
+          el('td', { text: hora(v.salida) }),
+          el('td', { text: `${ciudad(v.origen)} → ${ciudad(v.destino)}` }),
+          el('td', { text: v.cliente }),
+          el('td', { text: v.operador ? nombreCorto(v.operador) : '—' }),
+          el('td', { class: 'mono', text: v.placas || '—' }),
+          el('td', { text: fmtDinero.format(v.flete) }),
+          el('td', {}, el('span', { class: `st st--${e.clase}`, text: e.texto })));
+      });
+      $('#tabla-historial-cuerpo').replaceChildren(...(filas.length ? filas
+        : [el('tr', {}, el('td', { colspan: 8, class: 'muted', text: 'No hay viajes con esos filtros.' }))]));
+
+      paginaHistorial = r.pagina;
+      $('#hi-pagina').textContent = `Página ${r.pagina} de ${r.paginas}`;
+      $('#hi-anterior').disabled = r.pagina <= 1;
+      $('#hi-siguiente').disabled = r.pagina >= r.paginas;
+    }
+
+    // El CSV necesita el token, por eso se descarga con fetch y no con un enlace normal
+    async function exportarHistorial(boton) {
+      const consulta = consultaHistorial();
+      consulta.set('formato', 'csv');
+      boton.disabled = true;
+      try {
+        const respuesta = await fetch(`${API_URL}/viajes/historial?${consulta}`, {
+          headers: { Authorization: `Bearer ${sesion.leer()?.token}` }
+        });
+        if (!respuesta.ok) throw new Error((await respuesta.json().catch(() => ({}))).message || 'No se pudo exportar');
+        const url = URL.createObjectURL(await respuesta.blob());
+        const enlace = el('a', { href: url, download: `trazzo-viajes-${new Date().toISOString().slice(0, 10)}.csv` });
+        document.body.append(enlace);
+        enlace.click();
+        enlace.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        mostrarAviso('Historial exportado. Ábrelo con Excel.');
+      } catch (error) {
+        mostrarAviso(navigator.onLine ? error.message : 'Sin conexión: no se puede exportar ahora.');
+      } finally {
+        boton.disabled = false;
+      }
+    }
+
+    function iniciarHistorial() {
+      const form = $('#form-historial');
+      const recargar = () => cargarHistorial().catch((error) => mostrarAviso(error.message));
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        paginaHistorial = 1;
+        recargar();
+      });
+      // El reset vacía los campos después del evento: se espera un momento antes de recargar
+      form.addEventListener('reset', () => setTimeout(() => { paginaHistorial = 1; recargar(); }));
+      $('#hi-anterior').addEventListener('click', () => { paginaHistorial -= 1; recargar(); });
+      $('#hi-siguiente').addEventListener('click', () => { paginaHistorial += 1; recargar(); });
+      $('#hi-exportar').addEventListener('click', (e) => exportarHistorial(e.currentTarget));
+    }
+
+    /* ---------- Flota ---------- */
+    let unidadEditando = null;
+
+    // Estado visible: "en_ruta" en la base significa ocupada; se distingue si el viaje ya salió
+    function estadoUnidad(u) {
+      if (u.estado === 'taller') return { texto: 'En taller', clase: 'done' };
+      if (!u.viaje_activo) return { texto: 'Disponible', clase: 'go' };
+      if (u.viaje_estado === 'asignado') return { texto: `Asignada · ${u.viaje_activo}`, clase: 'wait' };
+      if (u.viaje_estado === 'retraso') return { texto: `Retraso · ${u.viaje_activo}`, clase: 'alert' };
+      return { texto: `En ruta · ${u.viaje_activo}`, clase: 'go' };
+    }
+
+    async function cambiarTaller(u, boton) {
+      const destino = u.estado === 'taller' ? 'disponible' : 'taller';
+      if (destino === 'taller' && !confirm(`¿Enviar ${u.placas} al taller? No se podrá asignar a viajes hasta que vuelva a servicio.`)) return;
+      boton.disabled = true;
+      try {
+        await api(`/flota/unidades/${u.id}`, { method: 'PATCH', body: { estado: destino } });
+        mostrarAviso(destino === 'taller' ? `${u.placas} enviada al taller.` : `${u.placas} volvió a servicio.`);
+        await cargarFlota();
+      } catch (error) {
+        mostrarAviso(error.message);
+        boton.disabled = false;
+      }
+    }
+
+    async function cargarFlota() {
+      const unidades = await api('/flota/unidades');
+      const disponibles = unidades.filter((u) => u.estado === 'disponible' && !u.viaje_activo);
+      const enUso = unidades.filter((u) => u.viaje_activo);
+      const asignadas = enUso.filter((u) => u.viaje_estado === 'asignado').length;
+
+      $('#fl-disponibles').textContent = dosDigitos(disponibles.length);
+      $('#fl-en-uso').textContent = dosDigitos(enUso.length);
+      $('#fl-en-uso-detalle').textContent = enUso.length ? `${asignadas} por salir · ${enUso.length - asignadas} en camino` : 'Ninguna en viaje';
+      $('#fl-taller').textContent = dosDigitos(unidades.filter((u) => u.estado === 'taller').length);
+      $('#fl-capacidad').textContent = `${fmtNumero.format(Math.round(disponibles.reduce((t, u) => t + u.capacidad_kg, 0) / 1000))} t`;
+      $('#fl-total').textContent = `${unidades.length} unidad${unidades.length === 1 ? '' : 'es'}`;
+
+      $('#tabla-unidades').replaceChildren(...unidades.map((u) => {
+        const e = estadoUnidad(u);
+        const taller = el('button', {
+          type: 'button',
+          class: 'btn btn--ghost btn--sm',
+          disabled: Boolean(u.viaje_activo),
+          title: u.viaje_activo ? 'Está en un viaje' : null,
+          onclick: (ev) => cambiarTaller(u, ev.currentTarget)
+        }, u.estado === 'taller' ? 'Volver a servicio' : 'A taller');
+        return el('tr', {},
+          el('td', {}, el('b', { class: 'mono', text: u.placas })),
+          el('td', { text: u.marca_modelo }),
+          el('td', { text: u.anio }),
+          el('td', { text: `${fmtNumero.format(u.capacidad_kg)} kg` }),
+          el('td', { class: 'mono muted', text: u.poliza || '—' }),
+          el('td', {}, el('span', { class: `st st--${e.clase}`, text: e.texto })),
+          el('td', { text: u.viajes_entregados }),
+          el('td', {}, el('div', { class: 'tabla-acciones' },
+            el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => abrirFormUnidad(u) }, 'Editar'),
+            taller)));
+      }));
+    }
+
+    function abrirFormUnidad(u = null) {
+      const form = $('#form-unidad');
+      unidadEditando = u;
+      form.reset();
+      $$('[aria-invalid]', form).forEach((c) => c.removeAttribute('aria-invalid'));
+      $$('.f .err', form).forEach((e) => e.remove());
+      $('#err-unidad').hidden = true;
+      $('#t-dlg-unidad').textContent = u ? `Editar ${u.placas}` : 'Agregar unidad';
+      form.anio.max = new Date().getFullYear() + 1;
+      if (u) ['placas', 'marca_modelo', 'anio', 'capacidad_kg', 'poliza'].forEach((c) => { form[c].value = u[c] ?? ''; });
+      $('#dlg-unidad').showModal();
+    }
+
+    function iniciarFlota() {
+      const dialogo = $('#dlg-unidad');
+      const form = $('#form-unidad');
+      const error = $('#err-unidad');
+      revalidarAlEscribir(form);
+
+      $('#btn-nueva-unidad').addEventListener('click', () => abrirFormUnidad());
+      $('#cancelar-unidad').addEventListener('click', () => dialogo.close());
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!validarFormulario(form)) return;
+
+        const boton = $('button[type="submit"]', form);
+        boton.disabled = true;
+        error.hidden = true;
+        const datos = {
+          placas: form.placas.value,
+          marca_modelo: form.marca_modelo.value,
+          anio: Number(form.anio.value),
+          capacidad_kg: Number(form.capacidad_kg.value),
+          poliza: form.poliza.value
+        };
+        try {
+          const u = unidadEditando
+            ? await api(`/flota/unidades/${unidadEditando.id}`, { method: 'PATCH', body: datos })
+            : await api('/flota/unidades', { method: 'POST', body: datos });
+          dialogo.close();
+          mostrarAviso(unidadEditando ? `Unidad ${u.placas} actualizada.` : `Unidad ${u.placas} agregada a la flota.`);
+          await cargarFlota();
+        } catch (err) {
+          error.textContent = err.message;
+          error.hidden = false;
+        } finally {
+          boton.disabled = false;
+        }
+      });
+    }
+
     /* ---------- Personal y roles ---------- */
     function pintarUsuarios(usuarios) {
       $('#tabla-usuarios').replaceChildren(...usuarios.map((u) => {
@@ -1577,6 +1968,159 @@
           error.hidden = false;
         } finally {
           boton.disabled = false;
+        }
+      });
+    }
+
+    /* ---------- Asistente con IA ---------- */
+    // La conversación vive solo en esta pestaña. Las acciones que propone la IA
+    // no se guardan hasta que la persona pulsa "Confirmar".
+    let conversacion = [];
+    const MAX_HISTORIAL = 18;
+
+    const SUGERENCIAS = {
+      oficina: [
+        'Resume la operación de hoy',
+        '¿Qué viajes van con retraso y por qué?',
+        '¿Quién puede llevar el viaje pendiente más próximo?',
+        'Registra un viaje de Puebla a Oaxaca mañana a las 8:00 con 10 toneladas de café para Cafés de Veracruz'
+      ],
+      operador: [
+        '¿Cuál es mi viaje actual?',
+        '¿A qué hora llego a mi destino?',
+        'Reporta un retraso por tráfico en mi viaje'
+      ]
+    };
+
+    function mensajeAsistente(rol, contenido) {
+      const caja = $('#asis-mensajes');
+      const burbuja = el('div', { class: `asis-msg asis-msg--${rol}` }, contenido);
+      caja.append(burbuja);
+      caja.scrollTop = caja.scrollHeight;
+      return burbuja;
+    }
+
+    // Ejecuta una propuesta con los endpoints normales (mismos permisos y validaciones que la interfaz)
+    async function confirmarPropuesta(p) {
+      if (p.tipo === 'registrar') {
+        const v = await api('/viajes', { method: 'POST', body: { ...p.datos, salida: new Date(p.datos.salida).toISOString() } });
+        return `Viaje ${v.folio} registrado.`;
+      }
+      if (p.tipo === 'asignar') {
+        const v = await api(`/viajes/${p.datos.viaje_id}/asignar`, { method: 'PATCH', body: { operador_id: p.datos.operador_id, unidad_id: p.datos.unidad_id } });
+        return `${v.folio} asignado a ${v.operador} con la unidad ${v.placas}.`;
+      }
+      if (p.tipo === 'estado') {
+        const v = await api(`/viajes/${p.datos.viaje_id}/estado`, { method: 'PATCH', body: { estado: p.datos.estado, nota: p.datos.nota } });
+        return `${v.folio}: ${ESTADOS[v.estado].texto.toLowerCase()}.`;
+      }
+      throw new Error('Acción desconocida');
+    }
+
+    function tarjetaPropuesta(p) {
+      const estado = el('small', { class: 'muted', text: 'Pendiente de confirmar' });
+      const confirmar = el('button', { type: 'button', class: 'btn btn--accent btn--sm' }, 'Confirmar');
+      const descartar = el('button', { type: 'button', class: 'btn btn--ghost btn--sm' }, 'Descartar');
+      const botones = el('div', { class: 'actions' }, descartar, confirmar);
+
+      confirmar.addEventListener('click', async () => {
+        confirmar.disabled = true;
+        descartar.disabled = true;
+        try {
+          const texto = await confirmarPropuesta(p);
+          estado.textContent = `✓ ${texto}`;
+          estado.className = 'c-green';
+          botones.remove();
+          conversacion.push({ rol: 'usuario', texto: `(Confirmé en pantalla: ${p.titulo}. Resultado: ${texto})` });
+          cargarSeccion({ silencioso: true });
+        } catch (error) {
+          estado.textContent = `✕ ${error.message}`;
+          estado.className = 'err';
+          confirmar.disabled = false;
+          descartar.disabled = false;
+        }
+      });
+      descartar.addEventListener('click', () => {
+        estado.textContent = 'Descartada';
+        botones.remove();
+        conversacion.push({ rol: 'usuario', texto: `(Descarté la propuesta: ${p.titulo})` });
+      });
+
+      return el('div', { class: 'asis-propuesta' },
+        el('b', { text: p.titulo }),
+        el('ul', {}, p.detalle.map((linea) => el('li', { text: linea }))),
+        estado,
+        botones);
+    }
+
+    async function preguntar(texto) {
+      const form = $('#asis-form');
+      const boton = $('button[type="submit"]', form);
+      conversacion.push({ rol: 'usuario', texto });
+      // Se conservan los últimos mensajes; la conversación debe empezar con el usuario
+      conversacion = conversacion.slice(-MAX_HISTORIAL);
+      while (conversacion.length && conversacion[0].rol !== 'usuario') conversacion.shift();
+
+      mensajeAsistente('usuario', texto);
+      $('#asis-sugerencias').hidden = true;
+      const pensando = mensajeAsistente('asistente', el('span', { class: 'asis-pensando', text: 'Consultando datos…' }));
+      boton.disabled = true;
+
+      try {
+        const { respuesta, propuestas } = await api('/asistente', { method: 'POST', body: { mensajes: conversacion } });
+        pensando.replaceChildren(respuesta);
+        conversacion.push({ rol: 'asistente', texto: respuesta });
+        propuestas.forEach((p) => mensajeAsistente('asistente', tarjetaPropuesta(p)));
+      } catch (error) {
+        pensando.replaceChildren(el('span', { class: 'err', text: error.message }));
+        conversacion.pop(); // la pregunta no obtuvo respuesta: se puede reintentar
+      } finally {
+        boton.disabled = false;
+        $('#asis-mensajes').scrollTop = $('#asis-mensajes').scrollHeight;
+      }
+    }
+
+    function reiniciarAsistente() {
+      conversacion = [];
+      const usuario = usuarioActual();
+      $('#asis-mensajes').replaceChildren(el('div', { class: 'asis-msg asis-msg--asistente' },
+        `Hola${usuario ? `, ${usuario.nombre.split(' ')[0]}` : ''}. Puedo consultar viajes, flota y rutas, y preparar registros, asignaciones o cambios de estado para que tú los confirmes.`));
+      const lista = SUGERENCIAS[esOficina() ? 'oficina' : 'operador'];
+      $('#asis-sugerencias').replaceChildren(...lista.map((s) => el('button', { type: 'button', class: 'asis-chip', onclick: () => preguntar(s) }, s)));
+      $('#asis-sugerencias').hidden = false;
+    }
+
+    function iniciarAsistente() {
+      const abrir = $('#asis-abrir');
+      const panel = $('#asis-panel');
+      const form = $('#asis-form');
+
+      const alternar = (abierto) => {
+        panel.hidden = !abierto;
+        abrir.setAttribute('aria-expanded', String(abierto));
+        if (abierto) {
+          if (!conversacion.length) reiniciarAsistente();
+          form.texto.focus();
+        }
+      };
+
+      abrir.addEventListener('click', () => alternar(panel.hidden));
+      $('#asis-cerrar').addEventListener('click', () => alternar(false));
+      $('#asis-nuevo').addEventListener('click', reiniciarAsistente);
+      panel.addEventListener('keydown', (e) => { if (e.key === 'Escape') alternar(false); });
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const texto = form.texto.value.trim();
+        if (!texto || $('button[type="submit"]', form).disabled) return;
+        form.texto.value = '';
+        preguntar(texto);
+      });
+      // Enter envía; Shift + Enter hace un salto de línea
+      form.texto.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          form.requestSubmit();
         }
       });
     }
@@ -1669,10 +2213,13 @@
       iniciarFormRuta();
       iniciarAsignacion();
       iniciarPersonal();
+      iniciarHistorial();
+      iniciarFlota();
       iniciarDetalle();
       iniciarInstalacion();
       iniciarAvisoConexion();
       iniciarNavegacionConDatos();
+      iniciarAsistente();
     });
 
     registrarServiceWorker();

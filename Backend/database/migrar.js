@@ -37,7 +37,8 @@ async function crearTablas() {
 async function agregarColumnas() {
   const nuevas = {
     distancia_km: 'DECIMAL(7, 1) NULL AFTER salida',
-    duracion_min: 'INT NULL AFTER distancia_km'
+    duracion_min: 'INT NULL AFTER distancia_km',
+    rastreo_token: 'VARCHAR(43) NULL UNIQUE AFTER entregado_en'
   };
   const [existentes] = await pool.query("SHOW COLUMNS FROM viajes");
   for (const [columna, tipo] of Object.entries(nuevas)) {

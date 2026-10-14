@@ -8,7 +8,8 @@ const SELECT_VIAJE = `
          v.creado_en, v.entregado_en,
          v.operador_id, o.nombre AS operador,
          v.unidad_id, u.placas, u.marca_modelo,
-         c.nombre AS capturo
+         c.nombre AS capturo,
+         v.rastreo_token IS NOT NULL AS rastreo_activo
   FROM viajes v
   LEFT JOIN usuarios o ON o.id = v.operador_id
   LEFT JOIN unidades u ON u.id = v.unidad_id
@@ -35,6 +36,67 @@ export const listar = async ({ estados, operadorId } = {}) => {
 
   const [rows] = await pool.query(`${SELECT_VIAJE} WHERE ${filtros.join(' AND ')} ${ORDEN} LIMIT 100`, valores);
   return rows;
+};
+
+// Historial: todos los viajes (incluidos los antiguos y cancelados) con filtros y paginación.
+// Devuelve la página pedida, el total de resultados y los totales de flete y kilómetros.
+export const historial = async ({ estados, texto, desde, hasta, operadorId, limite, desplazamiento }) => {
+  const filtros = ['1 = 1'];
+  const valores = [];
+
+  if (estados?.length) {
+    filtros.push(`v.estado IN (${estados.map(() => '?').join(', ')})`);
+    valores.push(...estados);
+  }
+  if (texto) {
+    filtros.push('CONCAT_WS(\' \', v.folio, v.origen, v.destino, v.cliente, v.mercancia, o.nombre, u.placas) LIKE ?');
+    valores.push(`%${texto}%`);
+  }
+  if (desde) {
+    filtros.push('v.salida >= ?');
+    valores.push(`${desde} 00:00:00`);
+  }
+  if (hasta) {
+    filtros.push('v.salida <= ?');
+    valores.push(`${hasta} 23:59:59`);
+  }
+  if (operadorId) {
+    filtros.push('v.operador_id = ?');
+    valores.push(operadorId);
+  }
+
+  const donde = `WHERE ${filtros.join(' AND ')}`;
+  const [[totales]] = await pool.query(
+    `SELECT COUNT(*) AS total,
+            COALESCE(SUM(CASE WHEN v.estado <> 'cancelado' THEN v.flete END), 0) AS flete,
+            COALESCE(SUM(CASE WHEN v.estado = 'entregado' THEN v.distancia_km END), 0) AS km
+     FROM viajes v
+     LEFT JOIN usuarios o ON o.id = v.operador_id
+     LEFT JOIN unidades u ON u.id = v.unidad_id
+     ${donde}`,
+    valores
+  );
+  const [rows] = await pool.query(
+    `${SELECT_VIAJE} ${donde} ORDER BY v.salida DESC, v.id DESC LIMIT ? OFFSET ?`,
+    [...valores, limite, desplazamiento]
+  );
+  return { ...totales, viajes: rows };
+};
+
+export const buscarPorFolio = async (folio) => {
+  const [rows] = await pool.query(`${SELECT_VIAJE} WHERE v.folio = ?`, [String(folio).trim().toUpperCase()]);
+  return rows[0];
+};
+
+// Para la página pública de rastreo: solo se busca por el token, nunca por id
+export const buscarPorToken = async (token) => {
+  const [rows] = await pool.query(`${SELECT_VIAJE} WHERE v.rastreo_token = ?`, [token]);
+  return rows[0];
+};
+
+export const tokenDeRastreo = async (id) => {
+  const [rows] = await pool.query('SELECT rastreo_token FROM viajes WHERE id = ?', [id]);
+  return rows[0]?.rastreo_token;
 };
 
 export const buscarPorId = async (id, conexion = pool) => {

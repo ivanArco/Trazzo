@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rastreo de tu envío · Trazzo</title>
+  <meta name="description" content="Sigue en vivo el avance de tu envío con Trazzo.">
+  <meta name="theme-color" content="#12306b">
+  <meta name="robots" content="noindex">
+
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    /* Página pública de rastreo: una sola columna pensada para el celular del cliente */
+    .rastreo {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .rastreo__head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .rastreo__vivo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: .8rem;
+      color: var(--muted);
+    }
+
+    .rastreo .tcard h1 {
+      font-size: 1.5rem;
+      letter-spacing: -.01em;
+      margin: 0;
+    }
+
+    .rastreo .tcard h1 i { font-style: normal; color: var(--c); }
+    .rastreo .tcard--done { opacity: 1; }
+
+    .rastreo__llegada {
+      display: grid;
+      gap: 2px;
+    }
+
+    .rastreo__llegada small { color: var(--muted); font-size: .78rem; }
+    .rastreo__llegada b { font: 700 clamp(1.15rem, 5vw, 1.6rem) "JetBrains Mono", monospace; }
+
+    #envio {
+      display: grid;
+      gap: 16px;
+    }
+
+    #mapa {
+      aspect-ratio: 16 / 11;
+      max-height: 380px;
+    }
+
+    #mapa.leaflet-container { font: inherit; }
+
+    .camion {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #1a1300;
+      border: 2px solid #fff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    }
+
+    .camion svg { width: 18px; height: 18px; }
+
+    .rastreo__pie {
+      text-align: center;
+      color: var(--muted);
+      font-size: .78rem;
+    }
+
+    .rastreo__aviso h1 { font-size: 1.2rem; margin: 0 0 6px; }
+    .rastreo__aviso p { margin: 0; color: var(--muted); }
+  </style>
+</head>
+
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-logo" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#12306b" /><path d="M120 150h272v58H286v184h-60V208H120z" fill="#fff" /><path d="M312 300h80l-40 70z" fill="#ff8a1f" /></symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12v11H2zM14 9h4l4 4v3h-8" /><circle cx="6.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></g></symbol>
+  </svg>
+
+  <main class="rastreo">
+    <header class="rastreo__head">
+      <span class="brand"><svg aria-hidden="true"><use href="#i-logo" /></svg><span>TRAZZO<small>RASTREO</small></span></span>
+      <span class="rastreo__vivo"><span class="live"></span><span id="actualizado">En vivo</span></span>
+    </header>
+
+    <section class="panel rastreo__aviso" id="aviso" role="status">
+      <h1>Cargando tu envío…</h1>
+      <p>Un momento, por favor.</p>
+    </section>
+
+    <div id="envio" hidden>
+      <article class="tcard" id="tarjeta">
+        <header><span class="mono" id="folio">—</span><span class="st" id="estado">—</span></header>
+        <h1 id="ruta">—</h1>
+        <div class="track"><span id="avance" style="--p:0%"></span></div>
+        <div class="rastreo__llegada">
+          <small id="llegada-titulo">Llegada estimada</small>
+          <b id="llegada">—</b>
+        </div>
+      </article>
+
+      <div class="panel" id="panel-mapa" hidden>
+        <div class="map" id="mapa" role="img" aria-label="Mapa con el recorrido del envío y la posición aproximada del camión"></div>
+      </div>
+
+      <div class="panel">
+        <dl class="kv" id="datos"></dl>
+      </div>
+
+      <div class="panel">
+        <header class="panel__head"><h2>Historial</h2></header>
+        <ul class="feed" id="eventos"></ul>
+      </div>
+    </div>
+
+    <p class="rastreo__pie">Se actualiza solo cada 15 segundos · Posición aproximada · Mapa © OpenStreetMap</p>
+  </main>
+
+  <script>
+    /* ==========================================================
+       TRAZZO · Rastreo público del envío (sin cuenta)
+       Lee el código del enlace (?t=...) y consulta /api/rastreo
+       ========================================================== */
+    'use strict';
+
+    // Misma computadora o red local: el backend está en el puerto 3000 del mismo equipo.
+    // Al publicar el backend en internet, cambia esta línea por su dirección.
+    const API_URL = `${location.protocol}//${location.hostname}:3000/api`;
+    const token = new URLSearchParams(location.search).get('t') || '';
+
+    const $ = (sel) => document.querySelector(sel);
+    const fmtHora = new Intl.DateTimeFormat('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const fmtFechaHora = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+    const fmtNumero = new Intl.NumberFormat('es-MX');
+    const esHoy = (f) => new Date(f).toDateString() === new Date().toDateString();
+    const hora = (f) => (f ? (esHoy(f) ? fmtHora : fmtFechaHora).format(new Date(f)).replace(/\./g, '') : '—');
+    const ciudad = (texto) => ((texto || '').split(',').pop().trim() || '—');
+    const duracion = (min) => (min ? `${Math.floor(min / 60) ? `${Math.floor(min / 60)} h ` : ''}${min % 60} min` : '—');
+
+    const ESTADOS = {
+      pendiente: { texto: 'Programado', clase: 'wait' },
+      asignado: { texto: 'Listo para salir', clase: 'go' },
+      en_ruta: { texto: 'En camino', clase: 'go' },
+      retraso: { texto: 'Con retraso', clase: 'alert' },
+      entregado: { texto: 'Entregado', clase: 'done' }
+    };
+    const CLASE_EVENTO = { retraso: 'alert', creado: 'wait' };
+
+    function mostrarAviso(titulo, texto) {
+      $('#envio').hidden = true;
+      const aviso = $('#aviso');
+      aviso.hidden = false;
+      aviso.querySelector('h1').textContent = titulo;
+      aviso.querySelector('p').textContent = texto;
+    }
+
+    /* ---------- Mapa ---------- */
+    let mapa = null;
+    let camion = null;
+
+    // Punto del trazo que corresponde a una fracción del recorrido (0 a 1)
+    function puntoEnTrazo(trazo, fraccion) {
+      const tramos = [];
+      let total = 0;
+      for (let i = 1; i < trazo.length; i++) {
+        const [la1, lo1] = trazo[i - 1];
+        const [la2, lo2] = trazo[i];
+        const largo = Math.hypot(la2 - la1, (lo2 - lo1) * Math.cos(la1 * Math.PI / 180));
+        tramos.push(largo);
+        total += largo;
+      }
+      let falta = total * Math.min(Math.max(fraccion, 0), 1);
+      for (let i = 0; i < tramos.length; i++) {
+        if (falta <= tramos[i]) {
+          const t = tramos[i] ? falta / tramos[i] : 0;
+          const [la1, lo1] = trazo[i];
+          const [la2, lo2] = trazo[i + 1];
+          return [la1 + (la2 - la1) * t, lo1 + (lo2 - lo1) * t];
+        }
+        falta -= tramos[i];
+      }
+      return trazo[trazo.length - 1];
+    }
+
+    function pintarMapa(envio) {
+      if (!window.L || !envio.ruta?.trazo?.length) return;
+      $('#panel-mapa').hidden = false;
+      const { trazo, origen, destino } = envio.ruta;
+      const color = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+      if (!mapa) {
+        mapa = L.map('mapa', { zoomControl: false, scrollWheelZoom: false });
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(mapa);
+        L.polyline(trazo, { color: color('--accent'), weight: 5, opacity: .85 }).addTo(mapa);
+        L.circleMarker([origen.lat, origen.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color('--go'), fillOpacity: 1 }).bindTooltip('Origen').addTo(mapa);
+        L.circleMarker([destino.lat, destino.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color('--accent'), fillOpacity: 1 }).bindTooltip('Destino').addTo(mapa);
+        camion = L.marker(trazo[0], {
+          icon: L.divIcon({ className: '', html: '<span class="camion"><svg aria-hidden="true"><use href="#i-truck" /></svg></span>', iconSize: [34, 34], iconAnchor: [17, 17] }),
+          keyboard: false
+        }).addTo(mapa);
+        mapa.fitBounds(L.latLngBounds(trazo), { padding: [28, 28] });
+      }
+      camion.setLatLng(puntoEnTrazo(trazo, envio.avance / 100));
+      camion.bindTooltip(`${envio.avance} % del recorrido`);
+    }
+
+    /* ---------- Datos del envío ---------- */
+    function fila(clave, valor) {
+      const div = document.createElement('div');
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+      dt.textContent = clave;
+      dd.textContent = valor;
+      div.append(dt, dd);
+      return div;
+    }
+
+    function pintar(envio) {
+      const e = ESTADOS[envio.estado] || { texto: envio.estado, clase: 'wait' };
+      document.title = `${envio.folio} · ${e.texto} · Trazzo`;
+      $('#aviso').hidden = true;
+      $('#envio').hidden = false;
+
+      $('#tarjeta').className = `tcard tcard--${e.clase}`;
+      $('#folio').textContent = envio.folio;
+      $('#estado').className = `st st--${e.clase}`;
+      $('#estado').textContent = e.texto;
+
+      const ruta = $('#ruta');
+      const flecha = document.createElement('i');
+      flecha.textContent = ' → ';
+      ruta.replaceChildren(ciudad(envio.origen), flecha, ciudad(envio.destino));
+      $('#avance').style.setProperty('--p', `${envio.avance}%`);
+
+      const entregado = envio.estado === 'entregado';
+      const pendiente = ['pendiente', 'asignado'].includes(envio.estado);
+      $('#llegada-titulo').textContent = entregado ? 'Entregado' : pendiente ? 'Salida programada' : 'Llegada estimada';
+      $('#llegada').textContent = hora(entregado ? envio.entregado_en : pendiente ? envio.salida : envio.eta);
+
+      $('#datos').replaceChildren(
+        fila('Avance', `${envio.avance} %`),
+        fila('Origen', envio.origen),
+        fila('Destino', envio.destino),
+        fila('Mercancía', envio.mercancia),
+        fila('Distancia', envio.distancia_km ? `${fmtNumero.format(envio.distancia_km)} km` : '—'),
+        fila('Tiempo de traslado', duracion(envio.duracion_min)),
+        fila('Operador', envio.operador || 'Por asignar')
+      );
+
+      $('#eventos').replaceChildren(...envio.eventos.map((ev) => {
+        const li = document.createElement('li');
+        if (CLASE_EVENTO[ev.tipo]) li.className = CLASE_EVENTO[ev.tipo];
+        const b = document.createElement('b');
+        const small = document.createElement('small');
+        b.textContent = ev.texto;
+        small.textContent = hora(ev.fecha);
+        li.append(b, small);
+        return li;
+      }));
+
+      pintarMapa(envio);
+      $('#actualizado').textContent = `Actualizado ${fmtHora.format(new Date())}`;
+    }
+
+    async function cargar() {
+      if (!token) {
+        mostrarAviso('Falta el código de rastreo', 'Abre el enlace completo o escanea de nuevo el código QR.');
+        return;
+      }
+      try {
+        const respuesta = await fetch(`${API_URL}/rastreo/${encodeURIComponent(token)}`);
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) {
+          mostrarAviso('No pudimos mostrar este envío', datos.message || `Error ${respuesta.status}`);
+          return false;
+        }
+        pintar(datos);
+        return datos.estado !== 'entregado';
+      } catch {
+        if ($('#envio').hidden) mostrarAviso('Sin conexión', 'Revisa tu internet; volveremos a intentar en unos segundos.');
+        return true;
+      }
+    }
+
+    // Se actualiza cada 15 s mientras la página está a la vista y el envío no se ha entregado
+    async function seguir() {
+      const continuar = await cargar();
+      if (continuar) setTimeout(function repetir() {
+        if (document.hidden) return setTimeout(repetir, 5000);
+        seguir();
+      }, 15000);
+    }
+
+    window.addEventListener('load', seguir);
+  </script>
+</body>
+
+</html>

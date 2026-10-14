@@ -21,15 +21,18 @@ function revisarJS(codigo, nombre, archivo = nombre, lineaInicial = 0) {
 }
 
 console.log('1. Revisando el código');
-const html = fs.readFileSync('index.html', 'utf8');
+const PAGINAS = ['index.html', 'rastreo.html']; // rastreo.html: página pública del cliente
+const htmls = Object.fromEntries(PAGINAS.map((p) => [p, fs.readFileSync(p, 'utf8')]));
 
-// JavaScript dentro de index.html
-const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)];
-scripts.forEach((m, i) => {
-  const inicio = m.index + m[0].indexOf('>') + 1;
-  const linea = html.slice(0, inicio).split('\n').length - 1;
-  revisarJS(m[1], `index.html (script ${i + 1})`, 'index.html', linea);
-});
+// JavaScript dentro de cada página
+for (const [pagina, html] of Object.entries(htmls)) {
+  const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)];
+  scripts.forEach((m, i) => {
+    const inicio = m.index + m[0].indexOf('>') + 1;
+    const linea = html.slice(0, inicio).split('\n').length - 1;
+    revisarJS(m[1], `${pagina} (script ${i + 1})`, pagina, linea);
+  });
+}
 
 // Service worker
 revisarJS(fs.readFileSync('sw.js', 'utf8'), 'sw.js');
@@ -45,7 +48,7 @@ try {
 
 console.log('\n2. Revisando que existan todos los archivos que usa la página');
 const referencias = new Set();
-for (const m of html.matchAll(/\b(?:src|href|poster)="([^"#]+)"/g)) {
+for (const m of Object.values(htmls).join('\n').matchAll(/\b(?:src|href|poster)="([^"#]+)"/g)) {
   const ruta = m[1];
   if (/^(https?:|mailto:|tel:|data:|\/\/)/.test(ruta)) continue;
   referencias.add(ruta.replace(/^\.\//, ''));
@@ -66,7 +69,7 @@ if (errores > 0) {
 console.log('\n3. Armando el artefacto en public/');
 fs.rmSync('public', { recursive: true, force: true });
 fs.mkdirSync('public');
-for (const item of ['index.html', 'manifest.json', 'sw.js', 'css', 'img', 'icons', 'video']) {
+for (const item of [...PAGINAS, 'manifest.json', 'sw.js', 'css', 'img', 'icons', 'video']) {
   if (fs.existsSync(item)) fs.cpSync(item, path.join('public', item), { recursive: true });
 }
 

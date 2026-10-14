@@ -7,7 +7,7 @@ import { estimar } from './rutaService.js';
 export const ESTADOS = ['pendiente', 'asignado', 'en_ruta', 'retraso', 'entregado', 'cancelado'];
 
 // A qué estados puede pasar un viaje desde cada estado
-const TRANSICIONES = {
+export const TRANSICIONES = {
   pendiente: ['cancelado'],            // de pendiente a asignado se pasa con asignar()
   asignado: ['en_ruta', 'cancelado'],
   en_ruta: ['retraso', 'entregado', 'cancelado'],
@@ -36,6 +36,61 @@ export const listar = async ({ estado } = {}, usuario) => {
     estados,
     operadorId: usuario.rol === 'operador' ? usuario.id : undefined
   });
+};
+
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+// Filtros del historial → parámetros seguros para la consulta
+function filtrosHistorial({ estado, q, desde, hasta } = {}, usuario) {
+  if (desde && !FECHA.test(desde)) throw new HttpError(400, 'La fecha "desde" no es válida');
+  if (hasta && !FECHA.test(hasta)) throw new HttpError(400, 'La fecha "hasta" no es válida');
+  if (desde && hasta && desde > hasta) throw new HttpError(400, 'La fecha "desde" debe ser anterior a "hasta"');
+  return {
+    estados: estado ? String(estado).split(',').filter((e) => ESTADOS.includes(e)) : undefined,
+    // % y _ son comodines en LIKE: se escapan para buscar el texto tal cual
+    texto: q ? String(q).trim().slice(0, 80).replace(/[\\%_]/g, '\\$&') : undefined,
+    desde,
+    hasta,
+    operadorId: usuario.rol === 'operador' ? usuario.id : undefined
+  };
+}
+
+export const historial = async (consulta = {}, usuario) => {
+  const porPagina = Math.min(Math.max(Number(consulta.por_pagina) || 20, 5), 100);
+  const pagina = Math.max(Number(consulta.pagina) || 1, 1);
+  const resultado = await viajeModel.historial({
+    ...filtrosHistorial(consulta, usuario),
+    limite: porPagina,
+    desplazamiento: (pagina - 1) * porPagina
+  });
+  return {
+    ...resultado,
+    pagina,
+    por_pagina: porPagina,
+    paginas: Math.max(Math.ceil(resultado.total / porPagina), 1)
+  };
+};
+
+// Mismo filtro que el historial, en CSV para abrir en Excel (máximo 5,000 viajes)
+export const historialCsv = async (consulta = {}, usuario) => {
+  const { viajes } = await viajeModel.historial({ ...filtrosHistorial(consulta, usuario), limite: 5000, desplazamiento: 0 });
+  const fecha = (f) => (f ? new Date(f).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '');
+  const celda = (valor) => {
+    const texto = String(valor ?? '');
+    return /[",\n;]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+  };
+  const columnas = [
+    ['Folio', (v) => v.folio], ['Estado', (v) => v.estado], ['Salida', (v) => fecha(v.salida)],
+    ['Entregado', (v) => fecha(v.entregado_en)], ['Origen', (v) => v.origen], ['Destino', (v) => v.destino],
+    ['Cliente', (v) => v.cliente], ['Mercancía', (v) => v.mercancia], ['Peso (kg)', (v) => v.peso_kg],
+    ['Flete (MXN)', (v) => v.flete], ['Distancia (km)', (v) => v.distancia_km], ['Operador', (v) => v.operador],
+    ['Unidad', (v) => v.placas]
+  ];
+  const lineas = [
+    columnas.map(([titulo]) => celda(titulo)).join(','),
+    ...viajes.map((v) => columnas.map(([, valor]) => celda(valor(v))).join(','))
+  ];
+  return '﻿' + lineas.join('\r\n'); // BOM: Excel reconoce los acentos
 };
 
 export const detalle = async (id, usuario) => {
