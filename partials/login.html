@@ -1,0 +1,15 @@
+  <section class="login" id="login" aria-labelledby="t-login">
+    <div class="login__art" aria-hidden="true">
+      <div class="grid-lines"></div>
+      <p class="login__tag">Cada viaje, a la vista:<br><span>navegador · pantalla del patio · reloj</span></p>
+    </div>
+    <form class="login__form" id="form-login" novalidate>
+      <a class="brand" href="#login"><svg aria-hidden="true"><use href="#i-logo" /></svg><span>TRAZZO<small>CONTROL</small></span></a>
+      <h1 id="t-login">Acceso al centro de control</h1>
+      <label class="f"><span>Correo electrónico</span><input name="correo" type="email" required placeholder="usuario@trazzo.mx" autocomplete="username"></label>
+      <label class="f"><span>Contraseña</span><input name="clave" type="password" required minlength="6" placeholder="••••••••" autocomplete="current-password"></label>
+      <button type="submit" class="btn btn--accent btn--block">Entrar</button>
+      <p class="muted login__note">Usa la cuenta que te asignó el administrador de Trazzo.</p>
+      <button type="button" class="btn btn--ghost btn--block js-instalar" hidden><svg class="i" aria-hidden="true"><use href="#i-phone" /></svg>Instalar Trazzo en este dispositivo</button>
+    </form>
+  </section>

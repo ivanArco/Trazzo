@@ -1,0 +1,66 @@
+<dialog class="dialog" id="dlg-usuario" aria-labelledby="t-dlg-usuario">
+    <form class="form" id="form-usuario" novalidate>
+      <h2 id="t-dlg-usuario">Registrar usuario</h2>
+      <label class="f"><span>Nombre completo</span><input name="nombre" required placeholder="Ej. Laura Méndez" autocomplete="off"></label>
+      <label class="f"><span>Correo electrónico</span><input name="correo" type="email" required placeholder="usuario@trazzo.mx" autocomplete="off"></label>
+      <label class="f"><span>Contraseña inicial</span><input name="clave" type="password" required minlength="6" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></label>
+      <label class="f"><span>Rol</span>
+        <select name="rol" required>
+          <option value="operador">Operador</option>
+          <option value="capturista">Capturista</option>
+          <option value="cliente">Cliente</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      <p class="err" id="err-usuario" role="alert" hidden></p>
+      <div class="dialog__acciones">
+        <button type="button" class="btn btn--ghost" id="cancelar-usuario">Cancelar</button>
+        <button type="submit" class="btn btn--accent">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Aviso flotante -->
+  <!-- ===================== AGREGAR / EDITAR UNIDAD ===================== -->
+  <dialog class="dialog" id="dlg-unidad" aria-labelledby="t-dlg-unidad">
+    <form class="form" id="form-unidad" novalidate>
+      <h2 id="t-dlg-unidad">Agregar unidad</h2>
+      <div class="cols">
+        <label class="f"><span>Placas</span><input name="placas" required minlength="5" placeholder="PUE-45-8K" class="mono" autocomplete="off"></label>
+        <label class="f"><span>Año</span><input name="anio" type="number" required min="1980" placeholder="2022" inputmode="numeric"></label>
+      </div>
+      <label class="f"><span>Marca y modelo</span><input name="marca_modelo" required list="lista-modelos" placeholder="Kenworth T680"></label>
+      <datalist id="lista-modelos"><option value="Kenworth T680"><option value="Freightliner Cascadia"><option value="International LT"><option value="Volvo VNL"><option value="Mercedes-Benz Actros"></datalist>
+      <div class="cols">
+        <label class="f"><span>Capacidad (kg)</span><input name="capacidad_kg" type="number" required min="500" step="100" placeholder="36000"></label>
+        <label class="f"><span>Póliza de seguro (opcional)</span><input name="poliza" placeholder="GNP-7781-2026" class="mono"></label>
+      </div>
+      <p class="err" id="err-unidad" role="alert" hidden></p>
+      <div class="dialog__acciones">
+        <button type="button" class="btn btn--ghost" id="cancelar-unidad">Cancelar</button>
+        <button type="submit" class="btn btn--accent">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===================== SEGUIMIENTO DE UN VIAJE ===================== -->
+  <dialog class="dialog dialog--ancho" id="dlg-viaje" aria-labelledby="dv-ruta">
+    <div class="tcard" id="dv-tarjeta">
+      <header><span class="mono" id="dv-folio">—</span><span class="st" id="dv-estado">—</span></header>
+      <h3 id="dv-ruta">—</h3>
+      <div class="track"><span id="dv-avance" style="--p:0%"></span></div>
+    </div>
+    <dl class="kv" id="dv-datos"></dl>
+    <div class="dv-acciones" id="dv-acciones">
+      <label class="f" id="dv-nota-campo"><span>Nota (opcional)</span><input id="dv-nota" maxlength="150" placeholder="Ej. Tráfico en la caseta"></label>
+      <div class="actions" id="dv-botones"></div>
+    </div>
+    <div class="dv-rastreo" id="dv-rastreo" hidden></div>
+    <h3 class="dv-titulo">Historial</h3>
+    <ul class="feed" id="dv-eventos"></ul>
+    <div class="actions"><button type="button" class="btn btn--ghost" id="dv-cerrar">Cerrar</button></div>
+  </dialog>
+
+  <div class="banda banda--offline" id="aviso-offline" role="status" hidden>Sin conexión · se muestran los últimos datos guardados</div>
+  <div class="banda banda--version" id="aviso-version" role="status" hidden>Hay una nueva versión de Trazzo <button type="button" class="btn btn--accent btn--sm" id="btn-actualizar">Actualizar</button></div>
+  

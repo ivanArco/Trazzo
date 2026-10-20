@@ -1,6 +1,6 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v2.6';
+const CACHE = 'trazzo-v2.7';
 
 const ARCHIVOS = [
   './',
@@ -8,6 +8,15 @@ const ARCHIVOS = [
   './rastreo.html',
   './css/styles.css',
   './manifest.json',
+  './js/app.js',
+  './js/trazzo-core.js',
+  './partials/header.html',
+  './partials/main.html',
+  './partials/footer.html',
+  './partials/login.html',
+  './partials/dialogs.html',
+  './partials/chatbot.html',
+  './partials/toast.html',
   './img/patio-carga.svg',
   './img/seguimiento-poster.jpg',
   './icons/icon-192.png',

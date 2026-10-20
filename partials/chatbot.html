@@ -1,0 +1,17 @@
+<!-- ===================== CHATBOT SIN COSTE ===================== -->
+  <button type="button" class="asis-boton" id="asis-abrir" data-rol="admin capturista operador" hidden aria-controls="asis-panel" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-spark" /></svg><span>ChatBot</span></button>
+  <section class="asis-panel" id="asis-panel" aria-labelledby="asis-titulo" hidden>
+    <header class="asis-panel__head">
+      <h2 id="asis-titulo"><svg class="i" aria-hidden="true"><use href="#i-spark" /></svg>ChatBot Trazzo <small>Sin coste</small></h2>
+      <button type="button" class="btn btn--ghost btn--sm" id="asis-nuevo" title="Empezar una conversación nueva">Nueva</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="asis-cerrar" aria-label="Cerrar asistente">✕</button>
+    </header>
+    <div class="asis-mensajes" id="asis-mensajes" aria-live="polite"></div>
+    <div class="asis-sugerencias" id="asis-sugerencias"></div>
+    <form class="asis-form" id="asis-form">
+      <textarea name="texto" rows="2" maxlength="2000" required placeholder="Pregunta o pide algo, por ejemplo: ¿qué viajes van con retraso?" aria-label="Mensaje para el asistente"></textarea>
+      <button type="submit" class="btn btn--accent btn--sm">Enviar</button>
+    </form>
+  </section>
+
+  
