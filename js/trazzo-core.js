@@ -275,18 +275,30 @@
       borrar() { sessionStorage.removeItem('trazzo-sesion'); }
     };
 
-    // Copia de las últimas consultas para poder mostrarlas sin conexión
-    const PREFIJO_CACHE = 'trazzo-cache:';
+    // Copia de las últimas consultas en la Cache API del navegador para poder mostrarlas sin conexión.
+    // Cada respuesta se guarda como un Response con su URL completa; se borra al cerrar sesión.
+    // (El nombre 'trazzo-api' también está en sw.js para que no se borre al publicar una versión nueva.)
+    const CACHE_API = 'trazzo-api';
     const cacheApi = {
-      leer(ruta) {
-        try { return JSON.parse(localStorage.getItem(PREFIJO_CACHE + ruta)); } catch { return null; }
-      },
-      guardar(ruta, datos) {
-        try { localStorage.setItem(PREFIJO_CACHE + ruta, JSON.stringify(datos)); } catch { /* almacenamiento lleno o bloqueado */ }
-      },
-      borrar() {
+      async leer(ruta) {
         try {
-          Object.keys(localStorage).filter((k) => k.startsWith(PREFIJO_CACHE)).forEach((k) => localStorage.removeItem(k));
+          const guardado = await (await caches.open(CACHE_API)).match(API_URL + ruta);
+          return guardado ? await guardado.json() : null;
+        } catch { return null; } // sin Cache API (http sin localhost) o almacenamiento bloqueado
+      },
+      async guardar(ruta, datos) {
+        try {
+          const respuesta = new Response(JSON.stringify(datos), {
+            headers: { 'Content-Type': 'application/json', 'X-Guardado-En': new Date().toISOString() }
+          });
+          await (await caches.open(CACHE_API)).put(API_URL + ruta, respuesta);
+        } catch { /* almacenamiento lleno o bloqueado */ }
+      },
+      async borrar() {
+        try { await caches.delete(CACHE_API); } catch { /* sin acceso al almacenamiento */ }
+        // Limpia la copia de versiones anteriores, que se guardaba en localStorage
+        try {
+          Object.keys(localStorage).filter((k) => k.startsWith('trazzo-cache:')).forEach((k) => localStorage.removeItem(k));
         } catch { /* sin acceso al almacenamiento */ }
       }
     };
@@ -306,7 +318,7 @@
         });
       } catch {
         // Sin red: las consultas usan la última copia guardada; los cambios no se pueden enviar
-        const guardado = method === 'GET' && cacheApi.leer(ruta);
+        const guardado = method === 'GET' && await cacheApi.leer(ruta);
         if (guardado) return guardado;
         throw new Error(navigator.onLine
           ? 'No hay conexión con el servidor. ¿Está encendido el backend?'
@@ -319,7 +331,7 @@
         mostrarAviso(datos.message || 'Tu sesión expiró.');
       }
       if (!respuesta.ok) throw new Error(datos.message || `Error ${respuesta.status}`);
-      if (method === 'GET') cacheApi.guardar(ruta, datos);
+      if (method === 'GET') await cacheApi.guardar(ruta, datos);
       return datos;
     }
 

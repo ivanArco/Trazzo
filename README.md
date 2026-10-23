@@ -157,7 +157,7 @@ Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token
 | Función | Cómo funciona |
 |---|---|
 | Instalable | `manifest.json` + botón propio «Instalar app» (evento `beforeinstallprompt`) en el encabezado y en el acceso |
-| Sin conexión | El Service Worker guarda la interfaz; las últimas consultas a la API se guardan en el navegador y se muestran sin red, con un aviso «Sin conexión» |
+| Sin conexión | El Service Worker guarda la interfaz; las últimas consultas a la API se guardan con la **Cache API** (caché `trazzo-api`) y se muestran sin red, con un aviso «Sin conexión» |
 | Aviso de versión nueva | Al publicar cambios aparece «Hay una nueva versión · Actualizar»; la app se recarga solo cuando el usuario lo decide |
 | Datos en vivo | Tablero, monitoreo y el seguimiento abierto se refrescan cada 10 s (se pausa si la pestaña no está visible) |
-| La API nunca se guarda en caché del Service Worker | Siempre se piden datos frescos al servidor |
+| Cache API para la API | `api()` en `js/trazzo-core.js` pide siempre a la red; si responde bien guarda una copia en `caches.open('trazzo-api')`, y sin red devuelve esa copia. Se borra al cerrar sesión y el Service Worker no la elimina al cambiar de versión |

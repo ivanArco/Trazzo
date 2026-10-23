@@ -37,7 +37,10 @@ await probar('/rastreo.html', (t) => t.includes('Rastreo de tu envío'));
 const html = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8');
 const locales = [...html.matchAll(/\b(?:src|href|poster)="([^"#]+)"/g)]
   .map((m) => m[1]).filter((r) => !/^(https?:|mailto:|tel:|data:|\/\/)/.test(r));
-for (const r of new Set([...locales, 'sw.js', 'manifest.json'])) await probar('/' + r.replace(/^\.\//, ''));
+// También todo lo que guarda el Service Worker (incluye js/trazzo-core.js y los parciales)
+const sw = fs.readFileSync(path.join(raiz, 'sw.js'), 'utf8');
+const delSW = [...sw.matchAll(/'\.\/([^']+)'/g)].map((m) => m[1]);
+for (const r of new Set([...locales, ...delSW, 'sw.js', 'manifest.json'])) await probar('/' + r.replace(/^\.\//, ''));
 
 servidor.close();
 if (errores) { console.error(`\nVERIFICACIÓN FALLIDA: ${errores} error(es)`); process.exit(1); }

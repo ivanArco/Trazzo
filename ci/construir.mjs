@@ -69,7 +69,8 @@ if (errores > 0) {
 console.log('\n3. Armando el artefacto en public/');
 fs.rmSync('public', { recursive: true, force: true });
 fs.mkdirSync('public');
-for (const item of [...PAGINAS, 'manifest.json', 'sw.js', 'css', 'img', 'icons', 'video']) {
+// js/ y partials/: index.html solo es el contenedor; la interfaz y la lógica se cargan desde ahí
+for (const item of [...PAGINAS, 'manifest.json', 'sw.js', 'css', 'js', 'partials', 'img', 'icons', 'video']) {
   if (fs.existsSync(item)) fs.cpSync(item, path.join('public', item), { recursive: true });
 }
 

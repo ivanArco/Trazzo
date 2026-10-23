@@ -1,6 +1,8 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v2.7';
+const CACHE = 'trazzo-v2.8';
+// Caché de las consultas a la API: la llena la página (js/trazzo-core.js) y se conserva entre versiones
+const CACHE_API = 'trazzo-api';
 
 const ARCHIVOS = [
   './',
@@ -35,11 +37,11 @@ self.addEventListener('message', (e) => {
   if (e.data === 'actualizar') self.skipWaiting();
 });
 
-// Activación: borra cachés de versiones anteriores
+// Activación: borra cachés de versiones anteriores (menos la de la API)
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((claves) =>
-      Promise.all(claves.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(claves.filter((k) => k !== CACHE && k !== CACHE_API).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -51,7 +53,7 @@ self.addEventListener('fetch', (e) => {
   const { request } = e;
   if (request.method !== 'GET' || request.headers.has('range')) return; // el video se pide por partes
 
-  // La API (backend) siempre va a la red: sus datos cambian y no deben quedarse guardados
+  // La API (backend) siempre va a la red; la copia sin conexión la maneja la página con la Cache API
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
 
