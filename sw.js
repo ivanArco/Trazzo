@@ -1,6 +1,6 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v2.8';
+const CACHE = 'trazzo-v2.9';
 // Caché de las consultas a la API: la llena la página (js/trazzo-core.js) y se conserva entre versiones
 const CACHE_API = 'trazzo-api';
 

@@ -104,7 +104,7 @@
     }
 
     function iniciarFiltros() {
-      const botones = $$('.seg button');
+      const botones = $$('.seg button[data-filtro]');
       botones.forEach((b) => {
         b.addEventListener('click', () => {
           botones.forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -431,7 +431,8 @@
       asignar: cargarAsignacion,
       personal: cargarUsuarios,
       historial: cargarHistorial,
-      flota: cargarFlota
+      flota: cargarFlota,
+      trafico: cargarTrafico
     };
 
     async function cargarSeccion({ silencioso = false } = {}) {
@@ -453,7 +454,7 @@
       // Seguimiento en vivo: cada 10 s se refresca lo que se está viendo
       setInterval(() => {
         if (document.hidden || !navigator.onLine || !usuarioActual()) return;
-        if (['#tablero', '#monitoreo'].includes(location.hash)) cargarSeccion({ silencioso: true });
+        if (['#tablero', '#monitoreo', '#trafico'].includes(location.hash)) cargarSeccion({ silencioso: true });
         if ($('#dlg-viaje').open) refrescarDetalle();
       }, 10000);
     }
@@ -799,6 +800,212 @@
       ]).addTo(mapaRuta);
       mapaRuta.invalidateSize();
       mapaRuta.fitBounds(L.latLngBounds(ruta.trazo), { padding: [24, 24] });
+    }
+
+    /* ---------- Tráfico en vivo (TomTom, solo administradores) ---------- */
+    // El backend consulta TomTom a lo más cada 5 min por viaje; aquí se refresca cada 10 s
+    // para mover el camión, pero las rutas y el tráfico salen de su caché.
+    const NIVELES = {
+      fluido: { texto: 'Fluido', clase: 'go' },
+      moderado: { texto: 'Moderado', clase: 'wait' },
+      pesado: { texto: 'Pesado', clase: 'alert' }
+    };
+
+    let mapaTrafico = null;
+    const capasTrafico = {};          // flujo e incidentes: imágenes de TomTom servidas por el backend
+    let capaViajeTrafico = null;      // rutas, incidentes y camión del viaje elegido
+    let viajeTraficoId = null;
+    let viajeEncuadrado = null;       // el mapa solo se reencuadra al cambiar de viaje
+
+    const colorTema = (variable) => getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+
+    function crearMapaTrafico() {
+      if (mapaTrafico || !window.L) return mapaTrafico;
+      const contenedor = $('#tr-mapa');
+      contenedor.replaceChildren();
+      mapaTrafico = L.map(contenedor).setView([19.9, -99.6], 7);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '© OpenStreetMap'
+      }).addTo(mapaTrafico);
+      for (const capa of ['flujo', 'incidentes']) {
+        capasTrafico[capa] = L.tileLayer(`${API_URL}/trafico/tiles/${capa}/{z}/{x}/{y}`, {
+          maxZoom: 18,
+          opacity: capa === 'flujo' ? 0.8 : 1,
+          attribution: capa === 'flujo' ? 'Tráfico © TomTom' : ''
+        });
+        if ($(`.seg button[data-capa="${capa}"]`)?.getAttribute('aria-pressed') !== 'false') capasTrafico[capa].addTo(mapaTrafico);
+      }
+      return mapaTrafico;
+    }
+
+    async function cargarTrafico() {
+      const viajes = await api('/trafico/viajes');
+      const estado = await api('/trafico/estado'); // después de la lista, para contar sus consultas
+
+      const aviso = $('#tr-aviso');
+      aviso.hidden = estado.configurado;
+      aviso.textContent = 'Falta la clave de TomTom (TOMTOM_API_KEY en Backend/.env): solo se muestra la ruta planeada, sin tráfico.';
+      $('#tr-consultas').textContent = `${fmtNumero.format(estado.consultas_hoy)} de ${fmtNumero.format(estado.limite_diario)} consultas hoy`;
+      $('#tr-actualizado').textContent = `actualizado ${fmtHora.format(new Date())}`;
+
+      const conDatos = viajes.filter((v) => v.nivel);
+      $('#tr-total').textContent = viajes.filter((v) => !v.error).length;
+      $('#tr-pesado').textContent = conDatos.filter((v) => v.nivel === 'pesado').length;
+      $('#tr-retraso').textContent = duracionTexto(conDatos.reduce((suma, v) => suma + v.retraso_min, 0));
+      $('#tr-ahorro').textContent = duracionTexto(conDatos.reduce((suma, v) => suma + v.ahorro_min, 0));
+
+      pintarListaTrafico(viajes);
+      crearMapaTrafico()?.invalidateSize(); // la sección estaba oculta al crear el mapa
+
+      const elegido = viajes.find((v) => v.id === viajeTraficoId && !v.error) || viajes.find((v) => !v.error);
+      if (elegido) await mostrarViajeTrafico(elegido.id);
+      else limpiarViajeTrafico();
+    }
+
+    function pintarListaTrafico(viajes) {
+      const lista = $('#tr-lista');
+      if (!viajes.length) {
+        lista.replaceChildren(el('li', { class: 'empty', text: 'No hay viajes asignados ni en ruta.' }));
+        return;
+      }
+      lista.replaceChildren(...viajes.map((v) => {
+        const nivel = NIVELES[v.nivel];
+        const detalles = [
+          v.retraso_min ? `+${v.retraso_min} min` : null,
+          v.incidentes ? `${v.incidentes} incidente${v.incidentes > 1 ? 's' : ''}` : null,
+          v.ahorro_min ? `ahorra ${v.ahorro_min} min` : null
+        ].filter(Boolean).join(' · ');
+
+        return el('li', {}, el('button', {
+          type: 'button',
+          class: 'tr-item',
+          'data-id': v.id,
+          'aria-pressed': String(v.id === viajeTraficoId),
+          disabled: Boolean(v.error),
+          onclick: () => mostrarViajeTrafico(v.id).catch((error) => mostrarAviso(error.message))
+        },
+        el('span', { class: 'tr-item__cabeza' },
+          el('span', { class: 'mono', text: v.folio }),
+          v.error ? el('span', { class: 'st st--alert', text: 'Sin ruta' })
+            : nivel ? el('span', { class: `st st--${nivel.clase}`, text: nivel.texto })
+              : el('span', { class: 'muted', text: 'Sin tráfico' })),
+        el('span', { class: 'tr-item__ruta', text: `${ciudad(v.origen)} → ${ciudad(v.destino)}` }),
+        el('small', { text: v.error || [ESTADOS[v.estado]?.texto, detalles].filter(Boolean).join(' · ') })));
+      }));
+    }
+
+    async function mostrarViajeTrafico(id) {
+      const datos = await api(`/trafico/viajes/${id}`);
+      viajeTraficoId = id;
+      $$('#tr-lista .tr-item').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.id) === id)));
+      pintarMapaTrafico(datos);
+      pintarDetalleTrafico(datos);
+    }
+
+    function limpiarViajeTrafico() {
+      viajeTraficoId = null;
+      capaViajeTrafico?.remove();
+      $('#tr-titulo').textContent = 'Mapa de tráfico';
+      $('#tr-sub').textContent = 'Sin viajes activos';
+      $('#tr-detalle').hidden = true;
+    }
+
+    function pintarMapaTrafico({ viaje, origen, destino, posicion, planeado, trafico }) {
+      if (!crearMapaTrafico()) return; // sin internet Leaflet no carga
+
+      const punto = (lugar, relleno, texto) => L.circleMarker(lugar, {
+        radius: 7, color: '#fff', weight: 2, fillColor: relleno, fillOpacity: 1
+      }).bindTooltip(texto);
+
+      const capas = [];
+      if (trafico) {
+        // Las alternativas van debajo y la recomendada encima
+        const rutas = [...trafico.rutas].sort((a, b) => Number(Boolean(a.recomendada)) - Number(Boolean(b.recomendada)));
+        for (const ruta of rutas) {
+          const estilo = ruta.recomendada
+            ? { color: colorTema('--info'), weight: 6, opacity: 0.95 }
+            : { color: colorTema('--muted'), weight: 4, opacity: 0.85, dashArray: '6 8' };
+          capas.push(L.polyline(ruta.trazo, estilo)
+            .bindTooltip(`${ruta.nombre} · ${duracionTexto(ruta.minutos)} · ${ruta.distancia_km} km`));
+        }
+        for (const incidente of trafico.rutas.find((r) => r.recomendada).incidentes) {
+          capas.push(L.circleMarker(incidente.posicion, {
+            radius: 6, color: '#fff', weight: 2, fillOpacity: 1,
+            fillColor: colorTema(incidente.magnitud === 3 ? '--alert' : '--wait')
+          }).bindTooltip(`${incidente.texto}${incidente.retraso_min ? ` · +${incidente.retraso_min} min` : ''}`));
+        }
+      } else {
+        capas.push(L.polyline(planeado, { color: colorTema('--accent'), weight: 5, opacity: 0.9 }));
+      }
+
+      capas.push(
+        punto([origen.lat, origen.lon], colorTema('--go'), 'Origen'),
+        punto([destino.lat, destino.lon], colorTema('--accent'), 'Destino'),
+        L.marker(posicion, {
+          icon: L.divIcon({ className: 'tr-camion', html: '<svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>', iconSize: [30, 30] }),
+          keyboard: false
+        }).bindTooltip(`${viaje.folio} · ${viaje.placas || 'sin unidad'} · ${viaje.avance}%`)
+      );
+
+      capaViajeTrafico?.remove();
+      capaViajeTrafico = L.layerGroup(capas).addTo(mapaTrafico);
+
+      // Si la sección aún no tiene tamaño, Leaflet calcularía un zoom enorme: se encuadra en la siguiente vuelta
+      mapaTrafico.invalidateSize();
+      const { x: ancho, y: alto } = mapaTrafico.getSize();
+      if (viajeEncuadrado !== viaje.id && ancho > 0 && alto > 0) {
+        const puntos = trafico ? trafico.rutas.flatMap((r) => r.trazo) : planeado;
+        mapaTrafico.fitBounds(L.latLngBounds([...puntos, posicion]), { padding: [28, 28] });
+        viajeEncuadrado = viaje.id;
+      }
+    }
+
+    function pintarDetalleTrafico({ viaje, trafico }) {
+      $('#tr-titulo').textContent = `${viaje.folio} · ${ciudad(viaje.origen)} → ${ciudad(viaje.destino)}`;
+      $('#tr-sub').textContent = viaje.estado === 'asignado'
+        ? 'Aún no sale: tráfico desde el origen'
+        : `Avance ${viaje.avance} % · tráfico de lo que falta`;
+
+      const panel = $('#tr-detalle');
+      panel.hidden = !trafico;
+      if (!trafico) return;
+
+      const nivel = NIVELES[trafico.nivel];
+      const etiqueta = $('#tr-nivel');
+      etiqueta.className = `st st--${nivel.clase}`;
+      etiqueta.textContent = `Tráfico ${nivel.texto.toLowerCase()}`;
+      $('#tr-reco').textContent = trafico.recomendacion.texto
+        + (trafico.desactualizado ? ' (Datos de hace unos minutos: TomTom no respondió.)' : '');
+
+      $('#tr-rutas').replaceChildren(...trafico.rutas.map((ruta) => el('div', { class: `tr-ruta${ruta.recomendada ? ' is-reco' : ''}` },
+        el('header', {},
+          el('b', { text: ruta.nombre }),
+          ruta.recomendada ? el('span', { class: 'tr-tag', text: 'Recomendada' })
+            : ruta.habitual ? el('span', { class: 'tr-tag tr-tag--muted', text: 'Habitual' }) : null),
+        el('p', { class: 'mono', text: duracionTexto(ruta.minutos) }),
+        el('small', { text: `${ruta.distancia_km} km · ${ruta.retraso_min ? `+${ruta.retraso_min} min por tráfico` : 'sin retraso'} · llega ${hora(ruta.llegada)}` }))));
+
+      const incidentes = trafico.rutas.find((r) => r.recomendada).incidentes;
+      $('#tr-incidentes').replaceChildren(...(incidentes.length
+        ? incidentes.map((i) => el('li', { class: i.magnitud === 3 ? 'alert' : 'wait' },
+          el('b', { text: i.texto }),
+          el('small', {
+            text: [i.retraso_min ? `+${i.retraso_min} min` : null, i.velocidad_kmh != null ? `${i.velocidad_kmh} km/h` : null]
+              .filter(Boolean).join(' · ') || 'Sin retraso estimado'
+          })))
+        : [el('li', {}, el('small', { text: 'Sin incidentes en la ruta recomendada.' }))]));
+    }
+
+    function iniciarTrafico() {
+      $$('.seg button[data-capa]').forEach((boton) => {
+        boton.addEventListener('click', () => {
+          const activa = boton.getAttribute('aria-pressed') !== 'true';
+          boton.setAttribute('aria-pressed', String(activa));
+          const capa = capasTrafico[boton.dataset.capa];
+          if (capa && mapaTrafico) activa ? capa.addTo(mapaTrafico) : capa.remove();
+        });
+      });
     }
 
     function iniciarFormRuta() {
@@ -1579,6 +1786,7 @@
       iniciarPersonal();
       iniciarHistorial();
       iniciarFlota();
+      iniciarTrafico();
       iniciarDetalle();
       iniciarInstalacion();
       iniciarAvisoConexion();

@@ -2,6 +2,77 @@
 
 Aplicación web de un emprendimiento de tecnología logística: registra, asigna y monitorea rutas de carga desde el navegador, la pantalla del patio y el reloj del operador.
 
+## Cambios en la rama `Elias` (respecto a `main`)
+
+### Nueva pestaña «Tráfico» en vivo (solo administradores)
+
+Muestra el tráfico real de las rutas de los viajes asignados y en ruta, con datos de **TomTom** (plan gratis:
+2,500 consultas de datos y 50,000 imágenes de mapa al día, sin tarjeta).
+
+- **Por viaje:** nivel de tráfico (fluido < 5 min de retraso, moderado < 15 min, pesado ≥ 15 min), minutos de
+  retraso, incidentes sobre la ruta (congestión, obras, cierres, accidentes…) y hora de llegada con tráfico.
+- **Rutas alternativas:** TomTom calcula la ruta para **camión** (con el peso de la carga) y hasta 2 alternativas.
+  Se compara la ruta habitual (la más corta sin tráfico) con la más rápida con el tráfico actual; si ahorra
+  5 min o más, se recomienda.
+- **Tráfico de lo que falta:** si el viaje ya va en ruta, se calcula desde la posición del camión hasta el destino.
+- **Mapa:** capas de flujo vehicular e incidentes de TomTom (se pueden apagar), ruta recomendada en azul,
+  alternativas punteadas, incidentes y el camión.
+- **Indicadores:** viajes analizados, con tráfico pesado, retraso total y ahorro posible.
+- **Cuota:** cada viaje se consulta a TomTom a lo más cada 5 min (caché en el backend) y hay un tope de
+  2,300 consultas al día. La pantalla se refresca cada 10 s para mover el camión, pero eso sale de la caché.
+- **Seguridad:** la clave de TomTom solo vive en `Backend/.env`; las imágenes del mapa pasan por el backend
+  (`/api/trafico/tiles/...`) para no exponerla. Un operador recibe 403 y sin sesión 401.
+- **Sin clave** la pestaña muestra solo la ruta planeada y un aviso; el resto de la app funciona igual.
+
+| Archivo | Cambio |
+|---|---|
+| `Backend/src/services/traficoService.js` | **Nuevo.** Consulta a TomTom, caché, cuota diaria, recomendación e imágenes del mapa |
+| `Backend/src/routes/traficoRouter.js` | **Nuevo.** Rutas `/api/trafico` |
+| `Backend/src/app.js` | Monta `/api/trafico` |
+| `Backend/.env.example` | Nueva variable `TOMTOM_API_KEY` (vacía; cada quien pone la suya en `.env`) |
+| `partials/header.html` | Enlace «Tráfico» en el menú (`data-rol="admin"`) |
+| `partials/main.html` | Sección `#trafico` |
+| `js/trazzo-core.js` | Lógica de la pantalla (`cargarTrafico`, mapa Leaflet, detalle y lista) |
+| `css/styles.css` | Sección 17 (estilos de tráfico, responsivos a 1100 y 560 px) |
+| `index.html` | Ícono `i-traffic` (semáforo) |
+
+Para usarla: crea una cuenta gratis en [developer.tomtom.com](https://developer.tomtom.com), copia la
+**API Key** del Dashboard y ponla en `Backend/.env` como `TOMTOM_API_KEY=tu_clave`. Nunca la pongas en
+`.env.example` ni en el código.
+
+### Arreglos
+
+- **Recargar en una sección mostraba la pantalla de acceso** (venía de la separación en `partials/`): al
+  recargar, el navegador buscaba el `#ancla` antes de que existieran los parciales. `js/app.js` vuelve a la
+  misma ancla después de insertarlos (con `location.replace`, sin agregar historial).
+- **El menú del administrador desbordaba la página** entre ~1100 y 1500 px de ancho: ahora los enlaces se
+  desplazan dentro de su franja (`.nav__links`) y los controles de la derecha no se recortan.
+- **El panel del ChatBot tapaba el encabezado:** ahora abre debajo del encabezado y arriba del botón en todos
+  los tamaños (sección 18 de `css/styles.css`, solo posición; su funcionamiento no cambió).
+- El filtro de «Monitoreo» tomaba todos los botones `.seg` de la página; ahora solo los que tienen `data-filtro`.
+- `sw.js` pasa a `trazzo-v2.9` para que los navegadores descarguen los archivos nuevos.
+
+### Entorno local y cuentas de prueba
+
+Para trabajar sin la base de la nube se usó **MySQL Server 8.4** local (`127.0.0.1:3306`, base `trazzo`) y la
+base se creó con `pnpm migrar -- --admin ... --demo`. Para levantar todo:
+
+1. MySQL: `"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file=<ruta>\my.ini --console`
+   (o regístralo como servicio de Windows para que arranque solo).
+2. Backend + frontend: `cd Backend` y `pnpm dev` (o `node --watch src/server.js`), luego abre `http://localhost:3000`.
+
+| Cuenta | Correo | Contraseña | Nota |
+|---|---|---|---|
+| Administrador local | `admin@trazzo.local` | `trazzo123` | Se creó con una contraseña aleatoria y después **se cambió a `trazzo123`** para que sea fácil de recordar |
+| Operadores de ejemplo | `juan.perez@trazzo.mx`, `laura@trazzo.mx`, `raul@trazzo.mx` | `trazzo123` | Los crea `pnpm migrar -- --demo` |
+| MySQL | `root` | *(sin contraseña)* | Solo escucha en `127.0.0.1` |
+
+> **Estas contraseñas son solo para la base local de desarrollo.** No las uses en la base de la nube ni en
+> producción: ahí crea el administrador con una contraseña propia (`pnpm migrar -- --admin ...`).
+
+Para probar el seguimiento con calma conviene `SIMULADOR_SEGUNDOS=60` en `Backend/.env` (con 10 s los viajes
+se entregan en unos 4 minutos; con 60 s, en unos 20-25).
+
 ## Estructura
 
 ```
@@ -149,6 +220,10 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | GET | `/api/rastreo/:token` | **Público** | Avance del envío para el cliente (máx. 30 consultas/min por IP) |
 | POST | `/api/asistente` | Admin / capturista / operador | `{ mensajes: [{ rol, texto }] }` → `{ respuesta, propuestas }` |
 | GET | `/api/rutas/estimar` | Admin / capturista | `?origen=&destino=&gps_origen=&gps_destino=` → distancia, tiempo y trazo de la ruta |
+| GET | `/api/trafico/estado` | Administrador | ¿Hay clave de TomTom? y consultas usadas hoy |
+| GET | `/api/trafico/viajes` | Administrador | Viajes asignados y en ruta con nivel de tráfico, retraso, incidentes y ahorro posible |
+| GET | `/api/trafico/viajes/:id` | Administrador | Detalle: rutas con tráfico (principal y alternativas), incidentes y recomendación |
+| GET | `/api/trafico/tiles/:capa/:z/:x/:y` | Público (máx. 600/min por IP) | Imágenes de la capa `flujo` o `incidentes` de TomTom (la clave no sale del servidor) |
 
 Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token en `Authorization: Bearer <token>`. Su dirección se configura en la constante `API_URL` de `index.html`.
 

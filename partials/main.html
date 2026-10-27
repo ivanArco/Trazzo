@@ -209,6 +209,58 @@
       </div>
     </section>
 
+    <!-- ===================== TRÁFICO EN VIVO (solo administradores) ===================== -->
+    <section class="screen" id="trafico" aria-labelledby="t-trafico">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow"><span class="live"></span>Tráfico en vivo · TomTom · <span id="tr-actualizado">cargando…</span></p>
+            <h1 id="t-trafico">Tráfico en las rutas</h1>
+          </div>
+          <div class="seg" role="group" aria-label="Capas del mapa">
+            <button type="button" data-capa="flujo" aria-pressed="true">Flujo vehicular</button>
+            <button type="button" data-capa="incidentes" aria-pressed="true">Incidentes</button>
+          </div>
+        </header>
+
+        <p class="tr-aviso" id="tr-aviso" hidden></p>
+
+        <div class="kpis">
+          <article class="kpi"><small>Viajes analizados</small><b id="tr-total">—</b><em>Asignados y en ruta</em></article>
+          <article class="kpi"><small>Con tráfico pesado</small><b class="c-red" id="tr-pesado">—</b><em>15 min o más de retraso</em></article>
+          <article class="kpi"><small>Retraso por tráfico</small><b class="c-amber" id="tr-retraso">—</b><em>Suma en las rutas habituales</em></article>
+          <article class="kpi"><small>Ahorro posible</small><b class="c-green" id="tr-ahorro">—</b><em>Tomando las rutas recomendadas</em></article>
+        </div>
+
+        <div class="grid-trafico">
+          <article class="panel">
+            <header class="panel__head"><h2>Viajes</h2><span class="muted" id="tr-consultas">—</span></header>
+            <ul class="tr-lista" id="tr-lista"><li class="muted">Cargando viajes…</li></ul>
+          </article>
+
+          <div class="col">
+            <article class="panel">
+              <header class="panel__head"><h2 id="tr-titulo">Mapa de tráfico</h2><span class="muted" id="tr-sub">Elige un viaje</span></header>
+              <div class="tr-mapa" id="tr-mapa" role="region" aria-label="Mapa con el tráfico en vivo y las rutas del viaje elegido"></div>
+              <ul class="tr-leyenda" aria-label="Leyenda del mapa">
+                <li><i class="tr-linea tr-linea--reco"></i>Ruta recomendada</li>
+                <li><i class="tr-linea tr-linea--alt"></i>Alternativas</li>
+                <li><i class="tr-flujo"></i>Flujo: verde fluido · rojo detenido</li>
+              </ul>
+            </article>
+
+            <article class="panel" id="tr-detalle" hidden>
+              <header class="panel__head"><h2>Recomendación</h2><span id="tr-nivel"></span></header>
+              <p class="tr-reco" id="tr-reco"></p>
+              <div class="tr-rutas" id="tr-rutas"></div>
+              <h3 class="tr-subtitulo">Incidentes en la ruta recomendada</h3>
+              <ul class="feed" id="tr-incidentes"></ul>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== HISTORIAL DE VIAJES ===================== -->
     <section class="screen" id="historial" aria-labelledby="t-historial">
       <div class="wrap">

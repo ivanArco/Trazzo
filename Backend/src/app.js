@@ -11,6 +11,7 @@ import rutaRoutes from './routes/rutaRouter.js';
 import rastreoRoutes from './routes/rastreoRouter.js';
 import asistenteRoutes from './routes/asistenteRouter.js';
 import chatbotRoutes from './routes/chatbotRouter.js';
+import traficoRoutes from './routes/traficoRouter.js';
 
 // Obtener la ruta equivalente a __dirname para ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +40,7 @@ app.use('/api/flota', flotaRoutes);
 app.use('/api/rutas', rutaRoutes);
 app.use('/api/asistente', asistenteRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/trafico', traficoRoutes);
 
 // 2. Servir el index.html en la raíz (/)
 app.get('/', (req, res) => {
