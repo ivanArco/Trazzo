@@ -2,9 +2,10 @@ import { enTransaccion } from '../config/db.js';
 import * as viajeModel from '../models/viajeModel.js';
 import * as flotaModel from '../models/flotaModel.js';
 import { HttpError } from '../utils/httpError.js';
-import { estimar } from './rutaService.js';
+import { calcularDuracionCamion, estimar, progresoEnRuta } from './rutaService.js';
 
 export const ESTADOS = ['pendiente', 'asignado', 'en_ruta', 'retraso', 'entregado', 'cancelado'];
+const rutasDelMapa = new Map();
 
 // A qué estados puede pasar un viaje desde cada estado
 export const TRANSICIONES = {
@@ -36,6 +37,101 @@ export const listar = async ({ estado } = {}, usuario) => {
     estados,
     operadorId: usuario.rol === 'operador' ? usuario.id : undefined
   });
+};
+
+export const mapa = async (usuario) => {
+  const viajes = await viajeModel.viajesParaMapa(usuario.rol === 'operador' ? usuario.id : undefined);
+  const activos = new Set(viajes.map((viaje) => viaje.id));
+  for (const id of rutasDelMapa.keys()) {
+    if (!activos.has(id)) rutasDelMapa.delete(id);
+  }
+
+  return await Promise.all(viajes.map(async (viaje) => {
+    const firma = [
+      viaje.origen, viaje.destino, viaje.gps_origen || '', viaje.gps_destino || '',
+      process.env.VELOCIDAD_PROMEDIO_CAMION_KMH || '65',
+      process.env.FACTOR_RESTRICCION_RUTA || '1'
+    ].join('|');
+    let entrada = rutasDelMapa.get(viaje.id);
+    if (!entrada || entrada.firma !== firma || (entrada.error && entrada.reintentarEn <= Date.now())) {
+      entrada = { firma, reintentarEn: 0 };
+      entrada.promesa = estimar(viaje)
+        .then((ruta) => { entrada.ruta = ruta; return ruta; })
+        .catch((error) => {
+          entrada.error = error.message;
+          entrada.reintentarEn = Date.now() + 60_000;
+          return null;
+        });
+      rutasDelMapa.set(viaje.id, entrada);
+    }
+
+    const ruta = entrada.ruta || await entrada.promesa;
+    const distancia = ruta?.distancia_km ?? viaje.distancia_km;
+    const tieneDistancia = distancia !== null && distancia !== undefined
+      && distancia !== '' && Number.isFinite(Number(distancia));
+    const puntoGps = viaje.gps_reciente && Number.isFinite(Number(viaje.gps_latitud))
+      && Number.isFinite(Number(viaje.gps_longitud))
+      ? [Number(viaje.gps_latitud), Number(viaje.gps_longitud)]
+      : null;
+    const progresoGps = puntoGps && ruta?.trazo ? progresoEnRuta(ruta.trazo, puntoGps) : null;
+    const restanteKm = progresoGps?.restante_km
+      ?? (tieneDistancia ? Number(distancia) * Math.max(0, 100 - viaje.avance) / 100 : null);
+    const estimacion = Number.isFinite(restanteKm)
+      ? calcularDuracionCamion(restanteKm)
+      : { duracion_min: viaje.duracion_min, velocidad_promedio_kmh: null, factor_restriccion: null };
+    const etaProyectada = ['en_ruta', 'retraso'].includes(viaje.estado) && Number.isFinite(estimacion.duracion_min)
+      ? new Date(Date.now()
+        + estimacion.duracion_min * 60_000
+        + (viaje.estado === 'retraso' ? 20 * 60_000 : 0)).toISOString()
+      : viaje.eta;
+    return {
+      ...viaje,
+      trazo: ruta?.trazo || null,
+      gps_latitud: puntoGps?.[0] ?? null,
+      gps_longitud: puntoGps?.[1] ?? null,
+      avance_mapa: progresoGps?.avance ?? viaje.avance,
+      gps_reciente: Boolean(puntoGps),
+      distancia_ruta_km: distancia,
+      duracion_ruta_min: ruta?.duracion_min ?? viaje.duracion_min,
+      eta_restante_min: estimacion.duracion_min,
+      eta_proyectada: etaProyectada,
+      velocidad_promedio_kmh: estimacion.velocidad_promedio_kmh,
+      factor_restriccion: estimacion.factor_restriccion,
+      ruta_error: ruta ? null : entrada.error
+    };
+  }));
+};
+
+export const actualizarUbicacion = async (id, datos = {}, usuario) => {
+  const viaje = await viajeModel.buscarPorId(id);
+  verificarAcceso(viaje, usuario);
+  if (usuario.rol !== 'operador') throw new HttpError(403, 'Solo el operador asignado puede compartir su ubicación');
+  if (!['en_ruta', 'retraso'].includes(viaje.estado)) {
+    throw new HttpError(409, 'El GPS del teléfono solo se puede compartir durante un viaje en curso');
+  }
+
+  const latitud = datos.latitud;
+  const longitud = datos.longitud;
+  const precision = datos.precision_m;
+  if (typeof latitud !== 'number' || !Number.isFinite(latitud) || latitud < -90 || latitud > 90) {
+    throw new HttpError(400, 'La latitud GPS no es válida');
+  }
+  if (typeof longitud !== 'number' || !Number.isFinite(longitud) || longitud < -180 || longitud > 180) {
+    throw new HttpError(400, 'La longitud GPS no es válida');
+  }
+  if (typeof precision !== 'number' || !Number.isFinite(precision) || precision < 0 || precision > 100_000) {
+    throw new HttpError(400, 'La precisión GPS no es válida');
+  }
+
+  await viajeModel.guardarUbicacion(id, { latitud, longitud, precision_m: precision });
+  return await viajeModel.buscarPorId(id);
+};
+
+export const detenerUbicacion = async (id, usuario) => {
+  const viaje = await viajeModel.buscarPorId(id);
+  verificarAcceso(viaje, usuario);
+  if (usuario.rol !== 'operador') throw new HttpError(403, 'Solo el operador asignado puede detener su ubicación');
+  await viajeModel.borrarUbicacion(id);
 };
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -209,6 +305,9 @@ export const cambiarEstado = async (id, { estado, nota } = {}, usuario) => {
     await viajeModel.actualizar(viaje.id, camposPorEstado(viaje, estado), conexion);
     if (['entregado', 'cancelado'].includes(estado) && viaje.unidad_id) {
       await flotaModel.cambiarEstadoUnidad(viaje.unidad_id, 'disponible', conexion);
+    }
+    if (['entregado', 'cancelado'].includes(estado)) {
+      await viajeModel.borrarUbicacion(viaje.id, conexion);
     }
     const texto = DESCRIPCION[estado](viaje, usuario) + (nota?.trim() ? `: ${nota.trim().slice(0, 150)}` : '');
     await viajeModel.registrarEvento(viaje.id, estado, texto, usuario.id, conexion);

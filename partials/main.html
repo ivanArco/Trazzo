@@ -23,14 +23,21 @@
         <div class="grid-main">
           <div class="col">
             <article class="panel">
-              <header class="panel__head"><h2>Mapa de unidades</h2><span class="muted" id="mapa-texto">—</span></header>
-              <div class="map map--wide" role="img" aria-label="Mapa esquemático con la posición simulada de las unidades en ruta" id="mapa-unidades">
+              <header class="panel__head"><h2>Mapa interactivo de unidades</h2><span class="muted" id="mapa-texto">Cargando…</span></header>
+              <div class="mapa__controles" aria-label="Controles del mapa">
+                <label class="mapa__ruta"><span>Ruta</span><select id="mapa-filtro-ruta" aria-label="Filtrar por ruta"><option value="todas">Todas las rutas</option></select></label>
+                <label class="mapa__capa"><input type="checkbox" id="mapa-capa-rutas" checked> Rutas</label>
+                <label class="mapa__capa"><input type="checkbox" id="mapa-capa-unidades" checked> Unidades</label>
+                <button type="button" class="btn btn--ghost btn--sm" id="mapa-encuadrar">Encuadrar flota</button>
+              </div>
+              <div class="map map--wide" role="region" aria-label="Mapa interactivo de rutas y unidades; posiciones simuladas" id="mapa-unidades">
                 <svg viewBox="0 0 160 70" preserveAspectRatio="none" aria-hidden="true">
                   <path class="mapa-ruta" d="M20 55 C 45 40, 60 50, 80 30 S 120 20, 145 12" fill="none" stroke="currentColor" stroke-width=".6" stroke-dasharray="2 2" />
                   <path class="mapa-ruta p-go" d="M30 15 C 50 25, 70 20, 95 50" fill="none" stroke-width=".6" stroke-dasharray="2 2" style="fill:none" />
                   <g id="mapa-puntos"></g>
                 </svg>
               </div>
+              <p class="mapa__nota" id="mapa-nota" role="status">La posición se simula a partir del avance del viaje; no representa GPS en vivo.</p>
             </article>
 
             <article class="panel">

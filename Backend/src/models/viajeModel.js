@@ -1,8 +1,8 @@
 import pool from '../config/db.js';
 
 // Viaje con los nombres de operador, unidad y capturista ya resueltos
-const SELECT_VIAJE = `
-  SELECT v.id, v.folio, v.origen, v.destino, v.gps_origen, v.gps_destino, v.mercancia,
+const CAMPOS_VIAJE = `
+  v.id, v.folio, v.origen, v.destino, v.gps_origen, v.gps_destino, v.mercancia,
          v.peso_kg, v.num_unidades, v.flete, v.cliente, v.salida, v.distancia_km, v.duracion_min,
          v.estado, v.avance, v.eta,
          v.creado_en, v.entregado_en,
@@ -10,10 +10,15 @@ const SELECT_VIAJE = `
          v.unidad_id, u.placas, u.marca_modelo,
          c.nombre AS capturo,
          v.rastreo_token IS NOT NULL AS rastreo_activo
+`;
+
+const TABLAS_VIAJE = `
   FROM viajes v
   LEFT JOIN usuarios o ON o.id = v.operador_id
   LEFT JOIN unidades u ON u.id = v.unidad_id
   LEFT JOIN usuarios c ON c.id = v.creado_por`;
+
+const SELECT_VIAJE = `SELECT ${CAMPOS_VIAJE} ${TABLAS_VIAJE}`;
 
 // Primero lo que requiere atención: retrasos, en ruta, asignados, pendientes, entregados
 const ORDEN = `ORDER BY FIELD(v.estado, 'retraso', 'en_ruta', 'asignado', 'pendiente', 'entregado', 'cancelado'), v.salida`;
@@ -35,6 +40,22 @@ export const listar = async ({ estados, operadorId } = {}) => {
   }
 
   const [rows] = await pool.query(`${SELECT_VIAJE} WHERE ${filtros.join(' AND ')} ${ORDEN} LIMIT 100`, valores);
+  return rows;
+};
+
+export const viajesParaMapa = async (operadorId) => {
+  const filtroOperador = operadorId ? 'AND v.operador_id = ?' : '';
+  const valores = operadorId ? [operadorId] : [];
+  const [rows] = await pool.query(
+    `SELECT ${CAMPOS_VIAJE},
+            v.gps_latitud, v.gps_longitud, v.gps_precision_m,
+            (v.gps_actualizado_en >= NOW() - INTERVAL 2 MINUTE) AS gps_reciente
+     ${TABLAS_VIAJE}
+     WHERE v.estado IN ('asignado', 'en_ruta', 'retraso') AND v.unidad_id IS NOT NULL ${filtroOperador}
+     ORDER BY FIELD(v.estado, 'retraso', 'en_ruta', 'asignado'), v.salida
+     LIMIT 100`,
+    valores
+  );
   return rows;
 };
 
@@ -102,6 +123,24 @@ export const tokenDeRastreo = async (id) => {
 export const buscarPorId = async (id, conexion = pool) => {
   const [rows] = await conexion.query(`${SELECT_VIAJE} WHERE v.id = ?`, [id]);
   return rows[0];
+};
+
+export const guardarUbicacion = async (id, { latitud, longitud, precision_m }, conexion = pool) => {
+  await conexion.execute(
+    `UPDATE viajes
+     SET gps_latitud = ?, gps_longitud = ?, gps_precision_m = ?, gps_actualizado_en = NOW()
+     WHERE id = ?`,
+    [latitud, longitud, precision_m, id]
+  );
+};
+
+export const borrarUbicacion = async (id, conexion = pool) => {
+  await conexion.execute(
+    `UPDATE viajes
+     SET gps_latitud = NULL, gps_longitud = NULL, gps_precision_m = NULL, gps_actualizado_en = NULL
+     WHERE id = ?`,
+    [id]
+  );
 };
 
 export const crear = async (datos, conexion = pool) => {
@@ -185,7 +224,13 @@ export const viajeActivoDeOperador = async (operadorId, exceptoViajeId, conexion
 // Viajes que el simulador hace avanzar
 export const viajesEnMovimiento = async () => {
   const [rows] = await pool.query(
-    "SELECT id, folio, estado, avance, unidad_id, duracion_min FROM viajes WHERE estado IN ('en_ruta', 'retraso')"
+    `SELECT id, folio, estado, avance, unidad_id, salida, eta, duracion_min,
+            UNIX_TIMESTAMP(salida) * 1000 AS salida_ms,
+            UNIX_TIMESTAMP(eta) * 1000 AS eta_ms,
+            (gps_actualizado_en >= NOW() - INTERVAL 2 MINUTE) AS gps_reciente
+     FROM viajes
+     WHERE unidad_id IS NOT NULL
+       AND estado IN ('asignado', 'en_ruta', 'retraso')`
   );
   return rows;
 };

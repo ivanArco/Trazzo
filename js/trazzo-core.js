@@ -249,7 +249,7 @@
       if (['pendiente', 'asignado'].includes(viaje.estado)) return `Sale ${hora(viaje.salida)}`;
       if (viaje.estado === 'entregado') return hora(viaje.entregado_en);
       if (viaje.estado === 'cancelado') return '—';
-      return `ETA ${hora(viaje.eta)}`;
+      return `ETA ${hora(viaje.eta_proyectada || viaje.eta)}`;
     }
 
     /* ---------- Conexión con la API (backend) ---------- */
@@ -306,6 +306,7 @@
     // fetch con el token y manejo de errores; lanza Error con el mensaje del servidor
     async function api(ruta, { method = 'GET', body } = {}) {
       const token = sesion.leer()?.token;
+      const cacheable = method === 'GET' && !ruta.startsWith('/viajes/mapa');
       let respuesta;
       try {
         respuesta = await fetch(API_URL + ruta, {
@@ -318,7 +319,7 @@
         });
       } catch {
         // Sin red: las consultas usan la última copia guardada; los cambios no se pueden enviar
-        const guardado = method === 'GET' && await cacheApi.leer(ruta);
+        const guardado = cacheable && await cacheApi.leer(ruta);
         if (guardado) return guardado;
         throw new Error(navigator.onLine
           ? 'No hay conexión con el servidor. ¿Está encendido el backend?'
@@ -331,7 +332,7 @@
         mostrarAviso(datos.message || 'Tu sesión expiró.');
       }
       if (!respuesta.ok) throw new Error(datos.message || `Error ${respuesta.status}`);
-      if (method === 'GET') await cacheApi.guardar(ruta, datos);
+      if (cacheable) await cacheApi.guardar(ruta, datos);
       return datos;
     }
 
@@ -356,6 +357,7 @@
     }
 
     function cerrarSesion() {
+      if (gpsViajeId) void detenerGpsTelefono({ aviso: false });
       sesion.borrar();
       cacheApi.borrar();
       $('#asis-panel').hidden = true;
@@ -510,8 +512,137 @@
       cuerpo.replaceChildren(...(filas.length ? filas : [el('tr', {}, el('td', { colspan: 7, class: 'muted', text: 'Aún no hay viajes registrados.' }))]));
     }
 
-    // Mapa esquemático: cada viaje en movimiento se coloca sobre una ruta según su avance (simulado)
-    function pintarMapa(viajes) {
+    let mapaLeaflet = null;
+    let capaRutasUnidades = null;
+    let capaMarcadoresUnidades = null;
+    let viajesMapa = [];
+    let mapaEncuadrado = false;
+    let cargandoMapa = false;
+
+    function iniciarMapaUnidades() {
+      const contenedor = $('#mapa-unidades');
+      if (!contenedor || !window.L) {
+        const controles = $('.mapa__controles');
+        if (controles) controles.hidden = true;
+        $('#mapa-texto').textContent = 'Vista esquemática · mapa detallado no disponible sin conexión';
+        return;
+      }
+
+      contenedor.replaceChildren();
+      mapaLeaflet = L.map(contenedor, { preferCanvas: true }).setView([23.6, -102.5], 5);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(mapaLeaflet);
+      capaRutasUnidades = L.layerGroup().addTo(mapaLeaflet);
+      capaMarcadoresUnidades = L.layerGroup().addTo(mapaLeaflet);
+
+      $('#mapa-filtro-ruta').addEventListener('change', () => pintarCapasMapa(true));
+      $('#mapa-capa-rutas').addEventListener('change', () => pintarCapasMapa());
+      $('#mapa-capa-unidades').addEventListener('change', () => pintarCapasMapa());
+      $('#mapa-encuadrar').addEventListener('click', () => encuadrarMapa());
+      window.addEventListener('hashchange', () => {
+        if (location.hash === '#tablero') mapaLeaflet?.invalidateSize();
+      });
+    }
+
+    function distanciaEntre(a, b) {
+      const radianes = Math.PI / 180;
+      const dLat = (b[0] - a[0]) * radianes;
+      const dLon = (b[1] - a[1]) * radianes;
+      const latA = a[0] * radianes;
+      const latB = b[0] * radianes;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(latA) * Math.cos(latB) * Math.sin(dLon / 2) ** 2;
+      return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    function ubicarEnTrazo(trazo, avance) {
+      if (!trazo?.length) return null;
+      if (trazo.length === 1) return { posicion: trazo[0], recorrido: trazo };
+
+      const segmentos = trazo.slice(1).map((punto, i) => distanciaEntre(trazo[i], punto));
+      const distanciaTotal = segmentos.reduce((total, tramo) => total + tramo, 0);
+      const objetivo = distanciaTotal * Math.max(0, Math.min(100, Number(avance) || 0)) / 100;
+      let acumulada = 0;
+      const recorrido = [trazo[0]];
+
+      for (let i = 0; i < segmentos.length; i++) {
+        const siguiente = acumulada + segmentos[i];
+        if (siguiente >= objetivo || i === segmentos.length - 1) {
+          const proporcion = segmentos[i] ? Math.max(0, Math.min(1, (objetivo - acumulada) / segmentos[i])) : 0;
+          const posicion = [
+            trazo[i][0] + (trazo[i + 1][0] - trazo[i][0]) * proporcion,
+            trazo[i][1] + (trazo[i + 1][1] - trazo[i][1]) * proporcion
+          ];
+          recorrido.push(posicion);
+          return { posicion, recorrido };
+        }
+        recorrido.push(trazo[i + 1]);
+        acumulada = siguiente;
+      }
+      return { posicion: trazo.at(-1), recorrido };
+    }
+
+    function encuadrarMapa() {
+      if (!mapaLeaflet) return;
+      const seleccionado = $('#mapa-filtro-ruta').value;
+      const viajes = viajesMapa.filter((viaje) => seleccionado === 'todas' || String(viaje.id) === seleccionado);
+      const coordenadas = viajes.flatMap((viaje) => viaje.trazo || []);
+      if (coordenadas.length) {
+        mapaLeaflet.fitBounds(L.latLngBounds(coordenadas), { padding: [24, 24], maxZoom: 12 });
+        mapaEncuadrado = true;
+      } else {
+        mapaLeaflet.setView([23.6, -102.5], 5);
+      }
+    }
+
+    function pintarCapasMapa(encuadrar = false) {
+      if (!mapaLeaflet) return;
+      capaRutasUnidades.clearLayers();
+      capaMarcadoresUnidades.clearLayers();
+      const seleccionado = $('#mapa-filtro-ruta').value;
+      const mostrarRutas = $('#mapa-capa-rutas').checked;
+      const mostrarUnidades = $('#mapa-capa-unidades').checked;
+      const colorVariable = (nombre) => getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+      const colorBase = colorVariable('--line') || '#72809a';
+      const visibles = viajesMapa.filter((viaje) => seleccionado === 'todas' || String(viaje.id) === seleccionado);
+
+      visibles.forEach((viaje) => {
+        const puntoGps = viaje.gps_reciente
+          && Number.isFinite(viaje.gps_latitud) && Number.isFinite(viaje.gps_longitud)
+          ? [viaje.gps_latitud, viaje.gps_longitud]
+          : null;
+        const ubicacionSimulada = ubicarEnTrazo(viaje.trazo, viaje.avance_mapa ?? viaje.avance);
+        const posicion = puntoGps || ubicacionSimulada?.posicion;
+        if (!posicion) return;
+        const color = colorVariable(viaje.estado === 'retraso' ? '--alert' : '--go') || '#257a4b';
+
+        if (mostrarRutas && viaje.trazo?.length) {
+          L.polyline(viaje.trazo, { color: colorBase, weight: 4, opacity: .65 }).addTo(capaRutasUnidades);
+          if (!puntoGps && ubicacionSimulada?.recorrido) {
+            L.polyline(ubicacionSimulada.recorrido, { color, weight: 5, opacity: .95 }).addTo(capaRutasUnidades);
+          }
+        }
+
+        if (mostrarUnidades) {
+          const popup = el('div', { class: 'mapa-popup' },
+            el('b', { text: `${viaje.folio} · ${viaje.placas || 'Unidad sin placas'}` }),
+            el('p', { text: `${ciudad(viaje.origen)} → ${ciudad(viaje.destino)}` }),
+            el('p', { text: `${viaje.estado === 'retraso' ? 'Con retraso' : viaje.estado === 'asignado' ? 'Asignado' : 'En ruta'} · ${viaje.avance_mapa ?? viaje.avance}%` }),
+            el('p', { text: puntoGps ? `GPS del teléfono · precisión ±${Math.round(viaje.gps_precision_m || 0)} m` : 'Ubicación simulada' }),
+            el('p', { text: etaTexto(viaje) }),
+            el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => abrirDetalle(viaje.id), text: 'Ver detalle' }));
+          L.circleMarker(posicion, {
+            radius: 9, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1
+          }).bindTooltip(`${viaje.folio} · ${viaje.avance_mapa ?? viaje.avance}%`).bindPopup(popup).addTo(capaMarcadoresUnidades);
+        }
+      });
+
+      if (encuadrar) encuadrarMapa();
+      else if (!mapaEncuadrado && visibles.some((viaje) => viaje.trazo?.length)) encuadrarMapa();
+    }
+
+    function pintarMapaEsquematico(viajes) {
       const enMovimiento = viajes.filter((v) => ['en_ruta', 'retraso'].includes(v.estado));
       const rutas = $$('#mapa-unidades .mapa-ruta');
       const grupo = $('#mapa-puntos');
@@ -519,6 +650,7 @@
 
       enMovimiento.forEach((v, i) => {
         const ruta = rutas[i % rutas.length];
+        if (!ruta) return;
         const punto = ruta.getPointAtLength(ruta.getTotalLength() * v.avance / 100);
         let circulo = grupo.querySelector(`[data-id="${v.id}"]`);
         if (!circulo) {
@@ -535,9 +667,51 @@
         vigentes.add(String(v.id));
       });
       $$('circle', grupo).forEach((c) => { if (!vigentes.has(c.dataset.id)) c.remove(); });
+      $('#mapa-texto').textContent = enMovimiento.length
+        ? `${enMovimiento.length} unidad${enMovimiento.length === 1 ? '' : 'es'} · posición simulada`
+        : 'Sin unidades en movimiento';
+    }
 
-      const n = enMovimiento.length;
-      $('#mapa-texto').textContent = n ? `${n} unidad${n === 1 ? '' : 'es'} en movimiento · posición simulada` : 'Sin unidades en movimiento';
+    async function cargarMapaInteractivo() {
+      if (!mapaLeaflet || cargandoMapa) return;
+      cargandoMapa = true;
+      try {
+        const datos = await api('/viajes/mapa');
+        viajesMapa = datos;
+        const filtroRuta = $('#mapa-filtro-ruta');
+        const anterior = filtroRuta.value;
+        filtroRuta.replaceChildren(el('option', { value: 'todas', text: 'Todas las rutas' }),
+          ...datos.map((viaje) => el('option', {
+            value: viaje.id,
+            text: `${viaje.folio} · ${viaje.placas || 'Unidad'}`
+          })));
+        filtroRuta.value = datos.some((viaje) => String(viaje.id) === anterior) ? anterior : 'todas';
+
+        const conError = datos.filter((viaje) => viaje.ruta_error);
+        const fecha = fmtHora.format(new Date()).replace(/\./g, '');
+        const gpsActivos = datos.filter((viaje) => viaje.gps_reciente).length;
+        $('#mapa-texto').textContent = datos.length
+          ? `${datos.length} unidad${datos.length === 1 ? '' : 'es'} · ${gpsActivos} GPS real${gpsActivos === 1 ? '' : 'es'} · ${fecha}`
+          : 'Sin unidades asignadas activas';
+        $('#mapa-nota').textContent = conError.length
+          ? `No se pudo trazar ${conError.map((viaje) => `${viaje.folio}: ${viaje.ruta_error}`).join(' · ')}. Las rutas pueden tardar al primer cálculo.`
+          : 'Las rutas son por carretera (OpenStreetMap). Los operadores pueden compartir el GPS del teléfono durante un viaje; sin GPS reciente, se muestra la posición simulada.';
+        mapaLeaflet.invalidateSize();
+        pintarCapasMapa();
+      } catch (error) {
+        $('#mapa-texto').textContent = 'No se pudo actualizar el mapa';
+        $('#mapa-nota').textContent = error.message;
+      } finally {
+        cargandoMapa = false;
+      }
+    }
+
+    function pintarMapa(viajes) {
+      if (!mapaLeaflet) {
+        pintarMapaEsquematico(viajes);
+        return;
+      }
+      cargarMapaInteractivo();
     }
 
     const claseEvento = (tipo) => ({ retraso: 'alert', creado: 'wait', cancelado: 'alert' }[tipo] || '');
@@ -572,6 +746,121 @@
 
     /* ---------- Seguimiento de un viaje (diálogo) ---------- */
     let viajeAbierto = null;
+    let gpsWatchId = null;
+    let gpsViajeId = null;
+    let gpsUltimoEnvio = 0;
+    let gpsEnvioEnCurso = false;
+
+    function mostrarEstadoGps(texto, error = false) {
+      const estado = $('#dv-gps-estado');
+      estado.textContent = texto;
+      estado.classList.toggle('es-error', error);
+    }
+
+    function pintarGpsTelefono(viaje) {
+      const zona = $('#dv-gps');
+      const usuario = usuarioActual();
+      const operadorAsignado = usuario?.rol === 'operador' && viaje.operador_id === usuario.id;
+      const viajeActivo = ['en_ruta', 'retraso'].includes(viaje.estado);
+      zona.hidden = !operadorAsignado || !viajeActivo;
+      if (zona.hidden) return;
+
+      const seguro = window.isSecureContext && Boolean(navigator.geolocation);
+      const boton = $('#dv-gps-toggle');
+      boton.disabled = !seguro;
+      boton.textContent = gpsViajeId === viaje.id
+        ? 'Dejar de compartir ubicación'
+        : 'Compartir ubicación de este teléfono';
+      if (!seguro) {
+        mostrarEstadoGps('Para usar el GPS, abre Trazzo en una conexión HTTPS segura y permite la ubicación del teléfono.', true);
+      } else if (gpsViajeId === viaje.id) {
+        mostrarEstadoGps('GPS activo en este teléfono. La app enviará una ubicación cada 10 segundos mientras permanezca abierta.');
+      } else {
+        mostrarEstadoGps('La ubicación solo se comparte durante este viaje y se borra al detener el GPS o entregar el viaje.');
+      }
+    }
+
+    async function enviarPosicionGps(viajeId, position) {
+      if (gpsViajeId !== viajeId || gpsEnvioEnCurso || Date.now() - gpsUltimoEnvio < 10_000) return;
+      gpsUltimoEnvio = Date.now();
+      gpsEnvioEnCurso = true;
+      try {
+        await api(`/viajes/${viajeId}/ubicacion`, {
+          method: 'PUT',
+          body: {
+            latitud: position.coords.latitude,
+            longitud: position.coords.longitude,
+            precision_m: position.coords.accuracy
+          }
+        });
+        if (gpsViajeId === viajeId) {
+          mostrarEstadoGps(`Compartiendo ubicación · precisión ±${Math.round(position.coords.accuracy)} m · actualizado ahora.`);
+          if (location.hash === '#tablero') cargarMapaInteractivo();
+        }
+      } catch (error) {
+        if (gpsViajeId === viajeId) {
+          mostrarEstadoGps(`No se pudo enviar la ubicación: ${error.message}`, true);
+          if (error.message.includes('solo se puede compartir durante un viaje en curso')) {
+            if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+            gpsWatchId = null;
+            gpsViajeId = null;
+            $('#dv-gps-toggle').textContent = 'Compartir ubicación de este teléfono';
+          } else if (error.message.includes('no está asignado a ti')) {
+            if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+            gpsWatchId = null;
+            gpsViajeId = null;
+            $('#dv-gps-toggle').textContent = 'Compartir ubicación de este teléfono';
+          }
+        }
+      } finally {
+        gpsEnvioEnCurso = false;
+      }
+    }
+
+    async function detenerGpsTelefono({ borrar = true, aviso = true } = {}) {
+      const viajeId = gpsViajeId;
+      if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+      gpsWatchId = null;
+      gpsViajeId = null;
+      gpsUltimoEnvio = 0;
+
+      if (borrar && viajeId && usuarioActual()) {
+        try {
+          await api(`/viajes/${viajeId}/ubicacion`, { method: 'DELETE' });
+        } catch (error) {
+          if (aviso) mostrarEstadoGps(`El GPS se detuvo en el teléfono, pero no se pudo borrar la última ubicación: ${error.message}`, true);
+        }
+      }
+      if (viajeAbierto === viajeId) {
+        mostrarEstadoGps('Ubicación detenida y última posición borrada.');
+        $('#dv-gps-toggle').textContent = 'Compartir ubicación de este teléfono';
+      }
+      if (aviso && viajeAbierto === viajeId) await refrescarDetalle();
+    }
+
+    function iniciarGpsTelefono(viajeId) {
+      if (!window.isSecureContext || !navigator.geolocation) {
+        mostrarEstadoGps('El GPS requiere HTTPS y permiso de ubicación en el teléfono.', true);
+        return;
+      }
+      if (gpsViajeId && gpsViajeId !== viajeId) void detenerGpsTelefono({ aviso: false });
+
+      gpsViajeId = viajeId;
+      gpsUltimoEnvio = 0;
+      mostrarEstadoGps('Esperando señal GPS del teléfono…');
+      gpsWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+          void enviarPosicionGps(viajeId, position);
+        },
+        (error) => {
+          if (gpsViajeId !== viajeId) return;
+          mostrarEstadoGps(`No se pudo obtener el GPS: ${error.message}`, true);
+          if (error.code === error.PERMISSION_DENIED) void detenerGpsTelefono({ aviso: false });
+        },
+        { enableHighAccuracy: true, maximumAge: 5_000, timeout: 20_000 }
+      );
+      $('#dv-gps-toggle').textContent = 'Dejar de compartir ubicación';
+    }
 
     async function abrirDetalle(id) {
       try {
@@ -618,6 +907,7 @@
       });
       $('#dv-datos').replaceChildren(...filas);
 
+      pintarGpsTelefono(v);
       pintarAcciones(v);
       $('#dv-eventos').replaceChildren(...v.eventos.map((ev) => el('li', { class: claseEvento(ev.tipo) },
         el('b', { text: ev.descripcion }),
@@ -729,6 +1019,9 @@
 
       boton.disabled = true;
       try {
+        if (['entregado', 'cancelado'].includes(accion.estado) && gpsViajeId === v.id) {
+          await detenerGpsTelefono({ aviso: false });
+        }
         const actualizado = await api(`/viajes/${v.id}/estado`, {
           method: 'PATCH',
           body: { estado: accion.estado, nota: $('#dv-nota').value }
@@ -746,6 +1039,11 @@
     function iniciarDetalle() {
       const dialogo = $('#dlg-viaje');
       $('#dv-cerrar').addEventListener('click', () => dialogo.close());
+      $('#dv-gps-toggle').addEventListener('click', () => {
+        if (!viajeAbierto) return;
+        if (gpsViajeId === viajeAbierto) void detenerGpsTelefono();
+        else iniciarGpsTelefono(viajeAbierto);
+      });
       dialogo.addEventListener('close', () => {
         viajeAbierto = null;
         delete $('#dv-botones').dataset.clave;
@@ -866,7 +1164,7 @@
           $('#pv-tiempo').textContent = duracionTexto(ruta.duracion_min);
           actualizarLlegada();
           const aproximados = [['del origen', ruta.origen], ['del destino', ruta.destino]].filter(([, lugar]) => lugar.aproximado).map(([nombre]) => nombre);
-          avisar(`Ruta por carretera de OpenStreetMap. En auto: ${duracionTexto(ruta.duracion_auto_min)}; en camión se estima un 30 % más.` +
+          avisar(`Ruta por carretera de OpenStreetMap. En auto: ${duracionTexto(ruta.duracion_auto_min)}; ETA de camión con promedio de ${ruta.velocidad_promedio_kmh} km/h y factor de restricciones ×${ruta.factor_restriccion}.` +
             (aproximados.length ? ` No se ubicó el punto exacto ${aproximados.join(' ni ')}: se usó la ciudad (agrega el enlace GPS para precisar).` : ''));
           dibujarRuta(ruta);
         } catch (error) {
@@ -1573,6 +1871,7 @@
       iniciarMenu();
       iniciarReloj();
       iniciarFiltros();
+      iniciarMapaUnidades();
       iniciarLogin();
       iniciarFormRuta();
       iniciarAsignacion();

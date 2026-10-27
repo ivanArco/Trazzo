@@ -5,6 +5,10 @@ export const listar = async (req, res) => {
   res.json(await viajeService.listar(req.query, req.usuario));
 };
 
+export const mapa = async (req, res) => {
+  res.json(await viajeService.mapa(req.usuario));
+};
+
 export const detalle = async (req, res) => {
   res.json(await viajeService.detalle(Number(req.params.id), req.usuario));
 };
@@ -27,6 +31,15 @@ export const asignar = async (req, res) => {
 
 export const cambiarEstado = async (req, res) => {
   res.json(await viajeService.cambiarEstado(Number(req.params.id), req.body, req.usuario));
+};
+
+export const actualizarUbicacion = async (req, res) => {
+  res.json(await viajeService.actualizarUbicacion(Number(req.params.id), req.body, req.usuario));
+};
+
+export const detenerUbicacion = async (req, res) => {
+  await viajeService.detenerUbicacion(Number(req.params.id), req.usuario);
+  res.status(204).end();
 };
 
 // El origen del frontend (encabezado Origin) sirve para armar el enlace del QR

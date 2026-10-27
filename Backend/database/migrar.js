@@ -38,7 +38,11 @@ async function agregarColumnas() {
   const nuevas = {
     distancia_km: 'DECIMAL(7, 1) NULL AFTER salida',
     duracion_min: 'INT NULL AFTER distancia_km',
-    rastreo_token: 'VARCHAR(43) NULL UNIQUE AFTER entregado_en'
+    rastreo_token: 'VARCHAR(43) NULL UNIQUE AFTER entregado_en',
+    gps_latitud: 'DECIMAL(10, 7) NULL AFTER rastreo_token',
+    gps_longitud: 'DECIMAL(10, 7) NULL AFTER gps_latitud',
+    gps_precision_m: 'DECIMAL(8, 2) NULL AFTER gps_longitud',
+    gps_actualizado_en: 'DATETIME NULL AFTER gps_precision_m'
   };
   const [existentes] = await pool.query("SHOW COLUMNS FROM viajes");
   for (const [columna, tipo] of Object.entries(nuevas)) {

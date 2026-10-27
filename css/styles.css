@@ -666,6 +666,56 @@ svg.i {
 .map--wide { aspect-ratio: 16 / 7; }
 .map--card { aspect-ratio: 4 / 3; }
 
+.mapa__controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.mapa__controles[hidden] { display: none; }
+
+.mapa__ruta {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.mapa__ruta select {
+  min-width: 190px;
+  height: 34px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.mapa__capa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  font-size: .82rem;
+}
+
+.mapa__nota {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.map--wide.leaflet-container {
+  height: clamp(320px, 42vw, 520px);
+  aspect-ratio: auto;
+  color: inherit;
+}
+
+.mapa-popup p { margin: 6px 0; }
+.mapa-popup .btn { margin-top: 4px; }
+
 .map .p-go    { fill: var(--go); stroke: var(--go); }
 .map .p-alert { fill: var(--alert); }
 .map .p-done  { fill: var(--done); }
@@ -1320,6 +1370,18 @@ body:has(.screen:target) .login {
 .dv-acciones .actions { justify-content: flex-start; }
 .dv-titulo { font-size: .95rem; color: var(--muted); }
 #dv-eventos { max-height: 240px; overflow-y: auto; }
+.dv-gps {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.dv-gps[hidden] { display: none; }
+.dv-gps p { margin: 0; font-size: .85rem; }
+.dv-gps .es-error { color: var(--alert); }
 
 /* Bandas fijas: sin conexión y nueva versión disponible */
 .banda {

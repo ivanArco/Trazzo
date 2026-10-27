@@ -89,17 +89,34 @@ pendiente ──asignar──▶ asignado ──iniciar──▶ en_ruta ⇄ ret
 
 - Al asignar se valida que el operador no tenga otro viaje y que la unidad esté libre y soporte el peso.
 - Cada cambio queda en el historial (`eventos_viaje`) y alimenta la «Actividad reciente» del tablero.
-- **Seguimiento simulado (solo de prueba):** cada `SIMULADOR_SEGUNDOS` (10 por defecto) el servidor avanza
-  los viajes en ruta, a veces provoca un retraso y al llegar al 100 % los entrega. Con `SIMULADOR_SEGUNDOS=0` se apaga.
+- **Seguimiento simulado (solo de prueba):** cada `SIMULADOR_SEGUNDOS` (10 por defecto) el servidor calcula el
+  avance según el tiempo transcurrido entre `salida` y `eta`; antes de la salida mantiene el viaje asignado,
+  al llegar la hora de salida lo pone en ruta y al alcanzar la ETA lo entrega. Los viajes activos con horario
+  vencido también se completan al iniciar el simulador. Si se comparte GPS reciente desde el teléfono, el reloj
+  simulado se pausa para ese viaje. Con `SIMULADOR_SEGUNDOS=0` se apaga.
 
-**Vista previa de la ruta y tiempo de traslado**
+**Mapa interactivo y ETA predictivo**
 
 Al escribir origen y destino en «Nueva ruta», el backend busca las direcciones con **Nominatim** y calcula el
-recorrido por carretera con **OSRM** (ambos de OpenStreetMap, gratis y sin API key). La vista previa muestra el
-mapa con el trazo (Leaflet), la distancia, el tiempo de traslado en camión (tiempo en auto × 1.3) y la hora de
-llegada según la salida. Si se pega un enlace de Google Maps en los campos GPS, se usan esas coordenadas.
-La distancia y el tiempo se guardan con el viaje y sirven para estimar la hora de llegada en el seguimiento.
-Los servidores públicos de OpenStreetMap son para uso moderado: los resultados se guardan en caché en el backend.
+recorrido por carretera con **OSRM** (OpenStreetMap, sin API key). La vista previa muestra el trazo (Leaflet),
+la distancia por carretera y el tiempo estimado de camión. El ETA se calcula como distancia real ÷ velocidad
+promedio × factor de restricciones. Los valores se pueden ajustar en `.env` con `VELOCIDAD_PROMEDIO_CAMION_KMH`
+(65 por defecto) y `FACTOR_RESTRICCION_RUTA` (1 = sin demora adicional); el endpoint de estimación también
+acepta `velocidad_promedio_kmh` (10–120) y `factor_restriccion` (1–3). Si se pega un enlace de Google Maps en
+los campos GPS, se usan esas coordenadas. El tiempo estimado se guarda con el viaje y el simulador recalcula
+el ETA a medida que cambia el avance.
+
+El tablero incluye un mapa de unidades con rutas por carretera, progreso de cada viaje, ETA, filtro por ruta,
+capas independientes de rutas/unidades, zoom para encuadrar la flota y detalles al seleccionar un marcador.
+Se actualiza junto con el tablero cada 10 segundos. El operador asignado puede abrir el seguimiento de su viaje
+en el teléfono y tocar «Compartir ubicación de este teléfono»; el navegador pedirá permiso y enviará una
+posición cada 10 segundos mientras la app permanezca abierta. La ubicación se muestra en el mapa autenticado,
+actualiza el progreso/ETA y se borra al detener el GPS o entregar/cancelar el viaje. Solo se conserva la última
+posición, no un historial. El GPS del navegador requiere HTTPS (o localhost) y permiso del usuario; para una
+prueba desde el teléfono, la app y la API deben estar accesibles desde el celular y el frontend debe usar HTTPS.
+Si no hay una posición GPS reciente, se muestra la posición simulada del viaje. El GPS puede pausarse cuando
+el teléfono bloquea la pantalla o el navegador pasa a segundo plano. Los servicios públicos de mapas limitan
+su uso; los trazos se guardan en caché en el backend.
 
 **Rastreo público con QR**
 
@@ -133,6 +150,11 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | GET | `/api/users` | Administrador | Lista de usuarios (sin contraseñas) |
 | POST | `/api/users` | Administrador | `{ nombre, correo, contraseña, rol }` |
 | GET | `/api/viajes` | Con sesión | Viajes activos y entregados recientes (`?estado=pendiente,asignado`). El operador solo ve los suyos |
+| GET | `/api/viajes/mapa` | Con sesión | Unidades activas con trazo de ruta y ETA; el operador solo ve su viaje |
+| PUT | `/api/viajes/:id/ubicacion` | Operador asignado, en ruta | `{ latitud, longitud, precision_m }` → guarda la última ubicación del teléfono |
+| DELETE | `/api/viajes/:id/ubicacion` | Operador asignado | Detiene el uso del GPS y borra la última ubicación |
+| PUT | `/api/viajes/:id/ubicacion` | Operador asignado, en ruta | `{ latitud, longitud, precision_m }` → guarda la última ubicación del teléfono |
+| DELETE | `/api/viajes/:id/ubicacion` | Operador asignado | Detiene el uso del GPS y borra la última ubicación |
 | GET | `/api/viajes/:id` | Con sesión | Viaje con su historial |
 | GET | `/api/viajes/historial` | Con sesión | Todos los viajes: `?q=&estado=&desde=&hasta=&pagina=&por_pagina=`; con `&formato=csv` descarga para Excel |
 | GET | `/api/viajes/resumen` | Con sesión | KPIs del tablero y estado de la flota |
@@ -148,7 +170,7 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | DELETE | `/api/viajes/:id/rastreo` | Admin / capturista | Desactiva el enlace (el QR deja de funcionar) |
 | GET | `/api/rastreo/:token` | **Público** | Avance del envío para el cliente (máx. 30 consultas/min por IP) |
 | POST | `/api/asistente` | Admin / capturista / operador | `{ mensajes: [{ rol, texto }] }` → `{ respuesta, propuestas }` |
-| GET | `/api/rutas/estimar` | Admin / capturista | `?origen=&destino=&gps_origen=&gps_destino=` → distancia, tiempo y trazo de la ruta |
+| GET | `/api/rutas/estimar` | Admin / capturista | `?origen=&destino=&gps_origen=&gps_destino=&velocidad_promedio_kmh=&factor_restriccion=` → distancia, ETA y trazo |
 
 Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token en `Authorization: Bearer <token>`. Su dirección se configura en la constante `API_URL` de `index.html`.
 
