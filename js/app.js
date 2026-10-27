@@ -21,6 +21,11 @@ async function boot() {
     inject('app-toast',  'partials/toast.html'),
   ]);
 
+  // Al recargar en una sección (#tablero, #trafico…) el navegador buscó el ancla antes de que
+  // existieran los parciales, así que ninguna sección quedó como :target y se veía el acceso.
+  // Volver a la misma ancla la activa sin agregar una entrada al historial.
+  if (location.hash) location.replace(location.hash);
+
   // Cargar el core DESPUÉS de inyectar todos los parciales
   const script = document.createElement('script');
   script.src = 'js/trazzo-core.js';
