@@ -1,8 +1,20 @@
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
+// Bases de datos en la nube (Aiven, PlanetScale…) exigen conexión cifrada: DB_SSL=true.
+// Con DB_CA_CERT (el certificado CA que da el proveedor) además se verifica que el servidor sea el correcto.
+// En la computadora local no se pone DB_SSL y la conexión queda como antes.
+function opcionesSsl() {
+  if (process.env.DB_SSL !== 'true') return undefined;
+  const ca = process.env.DB_CA_CERT?.trim();
+  return ca
+    ? { ca: ca.replace(/\\n/g, '\n'), rejectUnauthorized: true } // admite el certificado pegado en una sola línea con \n
+    : { rejectUnauthorized: false };                               // cifrada, pero sin verificar el certificado
+}
+
 // Los datos de conexión viven en .env (nunca en el código)
 const pool = mysql.createPool({
+  ssl: opcionesSsl(),
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,

@@ -1,2 +1,7 @@
 allowBuilds:
+  # bcrypt compila su módulo nativo: necesita su script
   bcrypt: true
+  # Gemini y su dependencia no necesitan scripts de instalación: se ignoran a propósito
+  # (sin declararlos, pnpm falla en servidores de despliegue como Render)
+  '@google/genai': false
+  protobufjs: false
