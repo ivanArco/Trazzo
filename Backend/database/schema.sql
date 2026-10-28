@@ -80,3 +80,18 @@ CREATE TABLE IF NOT EXISTS eventos_viaje (
   CONSTRAINT fk_evento_viaje FOREIGN KEY (viaje_id) REFERENCES viajes (id) ON DELETE CASCADE,
   CONSTRAINT fk_evento_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Suscripciones a notificaciones push (Web Push). viaje_id = 0: personal con sesión; > 0: cliente de ese envío
+CREATE TABLE IF NOT EXISTS suscripciones_push (
+  id INT NOT NULL AUTO_INCREMENT,
+  endpoint VARCHAR(600) CHARACTER SET ascii NOT NULL,
+  p256dh VARCHAR(200) NOT NULL,
+  auth VARCHAR(100) NOT NULL,
+  usuario_id INT NULL,
+  viaje_id INT NOT NULL DEFAULT 0,
+  creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY endpoint_viaje (endpoint, viaje_id),
+  KEY viaje (viaje_id),
+  CONSTRAINT fk_push_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -3,6 +3,7 @@ import * as viajeModel from '../models/viajeModel.js';
 import * as flotaModel from '../models/flotaModel.js';
 import { HttpError } from '../utils/httpError.js';
 import { estimar } from './rutaService.js';
+import { avisarViaje } from './notificacionService.js';
 
 export const ESTADOS = ['pendiente', 'asignado', 'en_ruta', 'retraso', 'entregado', 'cancelado'];
 
@@ -151,10 +152,12 @@ export const crear = async (datos = {}, usuario) => {
 
 export const asignar = async (id, { operador_id, unidad_id } = {}, usuario) => {
   if (!operador_id || !unidad_id) throw new HttpError(400, 'Elige un operador y una unidad');
+  let anteriorOperadorId = null; // si se reasigna, el chofer anterior recibe un aviso
 
   await enTransaccion(async (conexion) => {
     const viaje = await viajeModel.buscarPorId(id, conexion);
     if (!viaje) throw new HttpError(404, 'El viaje no existe');
+    anteriorOperadorId = viaje.operador_id;
     if (!['pendiente', 'asignado'].includes(viaje.estado)) {
       throw new HttpError(409, 'Solo se pueden asignar viajes pendientes o que aún no salen');
     }
@@ -184,6 +187,7 @@ export const asignar = async (id, { operador_id, unidad_id } = {}, usuario) => {
     );
   });
 
+  avisarViaje(id, 'asignado', { actorId: usuario.id, anteriorOperadorId });
   return await viajeModel.buscarPorId(id);
 };
 
@@ -214,6 +218,7 @@ export const cambiarEstado = async (id, { estado, nota } = {}, usuario) => {
     await viajeModel.registrarEvento(viaje.id, estado, texto, usuario.id, conexion);
   });
 
+  avisarViaje(viaje.id, estado, { actorId: usuario.id, reanuda: viaje.estado === 'retraso', nota });
   return await viajeModel.buscarPorId(id);
 };
 

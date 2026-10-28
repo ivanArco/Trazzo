@@ -71,10 +71,16 @@
       <div class="wrap">
         <header class="bar">
           <div>
-            <p class="eyebrow">El folio se genera al guardar</p>
-            <h1 id="t-ruta">Registrar nueva ruta</h1>
+            <p class="eyebrow">El folio se genera al guardar · después eliges operador y unidad aquí mismo</p>
+            <h1 id="t-ruta">Registrar y asignar rutas</h1>
           </div>
         </header>
+
+        <!-- Viajes que aún no tienen operador y unidad: al tocar uno se abre la asignación rápida -->
+        <div class="por-asignar" id="por-asignar" hidden>
+          <span class="por-asignar__t"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Por asignar</span>
+          <div class="por-asignar__lista" id="por-asignar-lista"></div>
+        </div>
 
         <div class="grid-form">
           <form class="panel form" id="form-ruta" novalidate>
@@ -137,56 +143,6 @@
     </section>
 
     <!-- ===================== ASIGNACIÓN ===================== -->
-    <section class="screen" id="asignar" aria-labelledby="t-asignar">
-      <div class="wrap">
-        <header class="bar">
-          <div>
-            <p class="eyebrow">Folio <span class="mono c-accent" id="as-folio">—</span> · <span id="as-ruta">—</span></p>
-            <h1 id="t-asignar">Asignar operador y unidad</h1>
-          </div>
-        </header>
-
-        <div class="grid-form">
-          <div class="col">
-            <article class="panel form">
-              <label class="f"><span>Viaje por asignar</span><select id="as-viaje"></select></label>
-              <p class="empty" id="as-vacio" hidden>No hay viajes pendientes. <a href="#ruta">Registra una ruta nueva</a>.</p>
-            </article>
-
-            <article class="panel">
-              <header class="panel__head"><h2>Operadores</h2><span class="muted" id="as-op-total">—</span></header>
-              <div class="pick" id="as-operadores"></div>
-            </article>
-
-            <article class="panel form">
-              <header class="panel__head"><h2>Unidad</h2></header>
-              <label class="f"><span>Unidad disponible</span><select id="as-unidad"></select></label>
-              <dl class="kv" id="as-unidad-info"></dl>
-              <div class="actions">
-                <a href="#ruta" class="btn btn--ghost">← Atrás</a>
-                <button type="button" class="btn btn--accent" id="confirmar-viaje"><svg class="i" aria-hidden="true"><use href="#i-check" /></svg>Confirmar viaje</button>
-              </div>
-            </article>
-          </div>
-
-          <aside class="panel sticky">
-            <header class="panel__head"><h2>Resumen del viaje</h2></header>
-            <dl class="kv">
-              <div><dt>Origen</dt><dd id="res-origen">—</dd></div>
-              <div><dt>Destino</dt><dd id="res-destino">—</dd></div>
-              <div><dt>Mercancía</dt><dd id="res-mercancia">—</dd></div>
-              <div><dt>Peso</dt><dd id="res-peso">—</dd></div>
-              <div><dt>Flete</dt><dd class="c-accent" id="res-flete">—</dd></div>
-              <div><dt>Salida</dt><dd id="res-salida">—</dd></div>
-              <div><dt>Operador</dt><dd id="res-operador">—</dd></div>
-              <div><dt>Unidad</dt><dd id="res-unidad">—</dd></div>
-              <div><dt>Notificación</dt><dd>Reloj Wear OS del operador</dd></div>
-            </dl>
-          </aside>
-        </div>
-      </div>
-    </section>
-
     <!-- ===================== MONITOREO ===================== -->
     <section class="screen" id="monitoreo" aria-labelledby="t-monitoreo">
       <div class="wrap">

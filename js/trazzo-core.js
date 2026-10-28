@@ -253,11 +253,16 @@
     }
 
     /* ---------- Conexión con la API (backend) ---------- */
-    // El backend corre en el puerto 3000 de la misma computadora (o de la misma red local).
-    // Cuando lo publiques en internet, cambia esta línea por su dirección.
-    const API_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000/api'
-    : 'https://trazzo-vosj.onrender.com/api';
+    // Dónde está la API (misma regla que rastreo.html):
+    //   · servidor de archivos de desarrollo (Live Server 5500/5501, python 8000/8080) → puerto 3000 del mismo equipo
+    //   · otra dirección local o Render: la página la sirve el propio backend → la misma dirección
+    //   · publicada en otro hosting (GitLab Pages) → el backend publicado en Render
+    const API_PUBLICA = 'https://trazzo-vosj.onrender.com/api';
+    const RED_LOCAL = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+    const SERVIDOR_DE_ARCHIVOS = ['5500', '5501', '8000', '8080'].includes(location.port);
+    const API_URL = RED_LOCAL.test(location.hostname)
+      ? (SERVIDOR_DE_ARCHIVOS ? `${location.protocol}//${location.hostname}:3000/api` : `${location.origin}/api`)
+      : location.hostname.endsWith('.onrender.com') ? `${location.origin}/api` : API_PUBLICA;
 
     const ROLES = {
       admin: { nombre: 'Administrador', clase: 'role--admin', dispositivos: 'Web · TV' },
@@ -330,7 +335,7 @@
         cerrarSesion();
         mostrarAviso(datos.message || 'Tu sesión expiró.');
       }
-      if (!respuesta.ok) throw new Error(datos.message || `Error ${respuesta.status}`);
+      if (!respuesta.ok) throw Object.assign(new Error(datos.message || `Error ${respuesta.status}`), { status: respuesta.status });
       if (method === 'GET') await cacheApi.guardar(ruta, datos);
       return datos;
     }
@@ -353,12 +358,15 @@
 
       // Oculta enlaces y botones que no corresponden al rol
       $$('[data-rol]').forEach((n) => { n.hidden = !permitidoPara(n, usuario?.rol); });
+      actualizarBotonAvisos(usuario);
     }
 
     function cerrarSesion() {
+      quitarAvisosDelServidor(); // este equipo deja de recibir los avisos de quien cerró sesión
       sesion.borrar();
       cacheApi.borrar();
       $('#asis-panel').hidden = true;
+      $('#asig').hidden = true;
       reiniciarAsistente();
       mostrarUsuario(null);
       location.hash = '#login';
@@ -428,7 +436,7 @@
     const cargadores = {
       tablero: cargarTablero,
       monitoreo: cargarMonitoreo,
-      asignar: cargarAsignacion,
+      ruta: cargarPorAsignar,
       personal: cargarUsuarios,
       historial: cargarHistorial,
       flota: cargarFlota,
@@ -446,9 +454,13 @@
     }
 
     function iniciarNavegacionConDatos() {
+      // «Asignación» ahora vive dentro de «Rutas»: los enlaces viejos a #asignar llevan ahí
+      const redirigir = () => { if (location.hash === '#asignar') location.replace('#ruta'); };
       window.addEventListener('hashchange', () => {
+        redirigir();
         if (protegerSecciones()) cargarSeccion();
       });
+      redirigir();
       if (protegerSecciones()) cargarSeccion();
 
       // Seguimiento en vivo: cada 10 s se refresca lo que se está viendo
@@ -669,7 +681,9 @@
     async function mostrarRastreo(v, boton) {
       boton.disabled = true;
       try {
-        const { url, qr_svg: qr } = await api(`/viajes/${v.id}/rastreo`, { method: 'POST' });
+        // Se envía la carpeta donde está publicada la app (p. ej. usuario.gitlab.io/trazzo/) para armar el enlace
+        const base = new URL('.', location.href).href;
+        const { url, qr_svg: qr } = await api(`/viajes/${v.id}/rastreo`, { method: 'POST', body: { base } });
         const zona = $('#dv-rastreo');
         const enRedLocal = /^https?:\/\/(10|172\.(1[6-9]|2\d|3[01])|192\.168)\./.test(url);
         const copiar = async (ev) => {
@@ -720,10 +734,8 @@
         return;
       }
       if (accion.irAsignar) {
-        viajeParaAsignar = v.id;
         $('#dlg-viaje').close();
-        if (location.hash === '#asignar') cargarSeccion();
-        else location.hash = '#asignar';
+        abrirAsignacion(v.id);
         return;
       }
       if (accion.confirmar && !confirm(accion.confirmar)) return;
@@ -1125,9 +1137,8 @@
           fijarSalidaSugerida(form);
           actualizarVista();
           limpiar('Escribe origen y destino para calcular el recorrido.');
-          viajeParaAsignar = nuevo.id;
-          location.hash = '#asignar';
-          mostrarAviso(`Ruta ${nuevo.folio} guardada. Ahora elige operador y unidad.`);
+          cargarPorAsignar().catch(() => {});
+          abrirAsignacion(nuevo.id, { recienGuardado: true }); // se asigna aquí mismo, sin cambiar de pantalla
         } catch (error) {
           mostrarAviso(error.message);
         } finally {
@@ -1136,139 +1147,172 @@
       });
     }
 
-    /* ---------- Asignación ---------- */
-    let viajeParaAsignar = null;
-    let datosAsignacion = { viajes: [], operadores: [], unidades: [] };
+    /* ---------- Asignación rápida (panel tipo toast) ---------- */
+    // Rutas y asignación viven en la misma pestaña: al guardar una ruta, al tocar un viaje «Por asignar»
+    // o desde el detalle de un viaje, aparece este panel con el operador y la unidad recomendados.
+    let asignacion = { viaje: null, operadores: [], unidades: [] };
 
-    async function cargarAsignacion() {
-      const [viajes, operadores, unidades] = await Promise.all([
-        api('/viajes?estado=pendiente,asignado'), api('/flota/operadores'), api('/flota/unidades')
-      ]);
-      // Primero los pendientes, luego los que ya tienen operador pero no salen
-      viajes.sort((a, b) => (a.estado === 'pendiente' ? 0 : 1) - (b.estado === 'pendiente' ? 0 : 1));
-      datosAsignacion = { viajes, operadores, unidades };
-
-      const select = $('#as-viaje');
-      select.replaceChildren(...viajes.map((v) => el('option', {
-        value: v.id,
-        text: `${v.folio} · ${ciudad(v.origen)} → ${ciudad(v.destino)} · ${ESTADOS[v.estado].texto}`
-      })));
-      if (viajes.some((v) => v.id === viajeParaAsignar)) select.value = viajeParaAsignar;
-
-      const hayViajes = viajes.length > 0;
-      $('#as-vacio').hidden = hayViajes;
-      select.closest('.f').hidden = !hayViajes;
-      $('#confirmar-viaje').disabled = !hayViajes;
-      mostrarViajeElegido();
+    async function cargarPorAsignar() {
+      const viajes = await api('/viajes?estado=pendiente');
+      $('#por-asignar').hidden = !viajes.length;
+      $('#por-asignar-lista').replaceChildren(...viajes.map((v) => el('button', {
+        type: 'button', class: 'por-asignar__viaje', onclick: () => abrirAsignacion(v.id)
+      },
+      el('b', { class: 'mono', text: v.folio }),
+      el('span', { text: `${ciudad(v.origen)} → ${ciudad(v.destino)}` }),
+      el('small', { class: 'muted', text: `${fmtNumero.format(v.peso_kg)} kg · sale ${hora(v.salida)}` }))));
+      pintarContadorMenu(viajes.length);
     }
 
-    const viajeElegido = () => datosAsignacion.viajes.find((v) => v.id === Number($('#as-viaje').value));
+    // Recomendación: el operador libre con menos viajes este mes y la unidad libre más justa para el peso
+    const operadorOcupado = (o, viaje) => Boolean(o.viaje_activo && o.viaje_activo !== viaje.folio);
+    const unidadLibre = (u, viaje) => u.estado === 'disponible' || u.id === viaje.unidad_id;
 
-    function mostrarViajeElegido() {
-      const v = viajeElegido();
-      $('#as-folio').textContent = v?.folio || '—';
-      $('#as-ruta').textContent = v ? `${ciudad(v.origen)} → ${ciudad(v.destino)}` : '—';
-      $('#res-origen').textContent = v?.origen || '—';
-      $('#res-destino').textContent = v?.destino || '—';
-      $('#res-mercancia').textContent = v?.mercancia || '—';
-      $('#res-peso').textContent = v ? `${fmtNumero.format(v.peso_kg)} kg` : '—';
-      $('#res-flete').textContent = v ? fmtDinero.format(v.flete) : '—';
-      $('#res-salida').textContent = v ? hora(v.salida) : '—';
-      pintarOperadores(v);
-      pintarUnidades(v);
+    function recomendar(viaje, operadores, unidades) {
+      const libres = operadores.filter((o) => !operadorOcupado(o, viaje)).sort((a, b) => a.viajes_mes - b.viajes_mes);
+      const aptas = unidades.filter((u) => unidadLibre(u, viaje) && u.capacidad_kg >= viaje.peso_kg)
+        .sort((a, b) => a.capacidad_kg - b.capacidad_kg);
+      return {
+        operador: libres.find((o) => o.id === viaje.operador_id) || libres[0],
+        unidad: aptas.find((u) => u.id === viaje.unidad_id) || aptas[0]
+      };
     }
 
-    function pintarOperadores(viaje) {
-      const { operadores } = datosAsignacion;
-      const lista = $('#as-operadores');
-      const ocupado = (o) => o.viaje_activo && o.viaje_activo !== viaje?.folio;
-      $('#as-op-total').textContent = `${operadores.filter((o) => !ocupado(o)).length} disponibles de ${operadores.length}`;
+    const asignacionLista = () => Boolean($('input[name="asig-op"]:checked') && $('#asig-unidad')?.value);
 
-      if (!operadores.length) {
-        lista.replaceChildren(el('p', { class: 'empty', text: 'No hay operadores. Regístralos en Personal y roles con el rol Operador.' }));
-      } else {
-        lista.replaceChildren(...operadores.map((o) => el('label', {},
-          el('input', { type: 'radio', name: 'op', value: o.id, 'data-nombre': o.nombre, disabled: ocupado(o), checked: viaje?.operador_id === o.id }),
-          el('span', { class: 'av', text: iniciales(o.nombre) }),
-          el('span', {}, el('b', { text: o.nombre }), el('small', { text: `${o.viajes_mes} viaje${o.viajes_mes === 1 ? '' : 's'} este mes` })),
-          el('span', { class: 'muted mono', text: ocupado(o) ? o.viaje_activo : '' }),
-          el('span', { class: `st ${ocupado(o) ? 'st--wait' : 'st--go'}`, text: ocupado(o) ? 'Ocupado' : 'Libre' }))));
-      }
-      // Si no hay uno elegido, se propone el primero libre
-      if (!$('input[name="op"]:checked')) {
-        const primero = $('input[name="op"]:not(:disabled)');
-        if (primero) primero.checked = true;
-      }
-      $('#res-operador').textContent = $('input[name="op"]:checked')?.dataset.nombre || '—';
-    }
+    function pintarAsignacion({ recienGuardado = false } = {}) {
+      const { viaje, operadores, unidades } = asignacion;
+      const sugerido = recomendar(viaje, operadores, unidades);
 
-    function pintarUnidades(viaje) {
-      const select = $('#as-unidad');
-      const usables = datosAsignacion.unidades.filter((u) => u.estado === 'disponible' || u.id === viaje?.unidad_id);
-      select.replaceChildren(...usables.map((u) => {
-        const noAlcanza = viaje && viaje.peso_kg > u.capacidad_kg;
+      $('#asig-estado').textContent = recienGuardado ? `✓ Ruta ${viaje.folio} guardada` : viaje.estado === 'asignado' ? 'Reasignar viaje' : 'Pendiente de asignar';
+      $('#asig-folio').textContent = viaje.folio;
+      $('#asig-ruta').textContent = `${ciudad(viaje.origen)} → ${ciudad(viaje.destino)} · ${fmtNumero.format(viaje.peso_kg)} kg · sale ${hora(viaje.salida)}`;
+
+      const ordenados = [...operadores].sort((a, b) =>
+        Number(operadorOcupado(a, viaje)) - Number(operadorOcupado(b, viaje)) || a.viajes_mes - b.viajes_mes);
+      const listaOperadores = ordenados.length
+        ? el('div', { class: 'pick asig__ops' }, ordenados.map((o) => {
+          const ocupado = operadorOcupado(o, viaje);
+          const recomendado = o === sugerido.operador;
+          return el('label', {},
+            el('input', { type: 'radio', name: 'asig-op', value: o.id, disabled: ocupado, checked: recomendado }),
+            el('span', { class: 'av', text: iniciales(o.nombre) }),
+            el('span', {}, el('b', { text: o.nombre }),
+              el('small', { text: ocupado ? `En ${o.viaje_activo}` : `${o.viajes_mes} viaje${o.viajes_mes === 1 ? '' : 's'} este mes` })),
+            el('span', { class: `st ${ocupado ? 'st--wait' : 'st--go'}`, text: ocupado ? 'Ocupado' : recomendado ? 'Recomendado' : 'Libre' }));
+        }))
+        : el('p', { class: 'empty', text: 'No hay operadores. Regístralos en Personal y roles con el rol Operador.' });
+
+      const libres = unidades.filter((u) => unidadLibre(u, viaje)).sort((a, b) => a.capacidad_kg - b.capacidad_kg);
+      const select = el('select', { id: 'asig-unidad' }, libres.map((u) => {
+        const noAlcanza = u.capacidad_kg < viaje.peso_kg;
         return el('option', {
           value: u.id,
           disabled: noAlcanza,
-          text: `${u.placas} · ${u.marca_modelo}${noAlcanza ? ' (no soporta el peso)' : ''}`
+          selected: u === sugerido.unidad,
+          text: `${u.placas} · ${u.marca_modelo} · ${fmtNumero.format(u.capacidad_kg)} kg${noAlcanza ? ' (no soporta el peso)' : u === sugerido.unidad ? ' · recomendada' : ''}`
         });
       }));
-      if (!usables.length) select.replaceChildren(el('option', { value: '', text: 'No hay unidades disponibles' }));
-
-      const preferida = usables.find((u) => u.id === viaje?.unidad_id) || usables.find((u) => !(viaje && viaje.peso_kg > u.capacidad_kg));
-      if (preferida) {
-        select.value = preferida.id;
-      } else if (usables.length && viaje) {
-        select.prepend(el('option', { value: '', text: `Ninguna unidad libre soporta ${fmtNumero.format(viaje.peso_kg)} kg` }));
-        select.value = '';
+      if (!sugerido.unidad) {
+        select.prepend(el('option', {
+          value: '', selected: true,
+          text: libres.length ? `Ninguna unidad libre soporta ${fmtNumero.format(viaje.peso_kg)} kg` : 'No hay unidades disponibles'
+        }));
       }
-      mostrarUnidad();
+
+      $('#asig-cuerpo').replaceChildren(
+        el('h3', { text: 'Operador' }), listaOperadores,
+        el('label', { class: 'f' }, el('span', { text: 'Unidad' }), select));
+      $('#asig-pie').replaceChildren(
+        el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: cerrarAsignacion }, 'Más tarde'),
+        el('button', { type: 'button', class: 'btn btn--accent btn--sm', id: 'asig-confirmar', onclick: confirmarAsignacion, disabled: !asignacionLista() },
+          icono('i-check'), 'Asignar'));
     }
 
-    function mostrarUnidad() {
-      const u = datosAsignacion.unidades.find((x) => x.id === Number($('#as-unidad').value));
-      const datos = u ? [
-        ['Marca y modelo', u.marca_modelo], ['Año', u.anio],
-        ['Capacidad', `${fmtNumero.format(u.capacidad_kg)} kg`], ['Póliza de seguro', u.poliza || '—']
-      ] : [];
-      $('#as-unidad-info').replaceChildren(...datos.map(([k, v]) => el('div', {}, el('dt', { text: k }), el('dd', { text: v }))));
-      $('#res-unidad').textContent = u ? u.placas : '—';
+    async function abrirAsignacion(id, opciones = {}) {
+      try {
+        const [viaje, operadores, unidades] = await Promise.all([api(`/viajes/${id}`), api('/flota/operadores'), api('/flota/unidades')]);
+        if (!['pendiente', 'asignado'].includes(viaje.estado)) {
+          mostrarAviso(`${viaje.folio} ya salió o terminó: no se puede asignar.`);
+          return;
+        }
+        asignacion = { viaje, operadores, unidades };
+        pintarAsignacion(opciones);
+        const panel = $('#asig');
+        panel.hidden = false;
+        requestAnimationFrame(() => panel.classList.add('is-on'));
+        ($('#asig input[name="asig-op"]:checked') || $('#asig-unidad'))?.focus({ preventScroll: true });
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    function cerrarAsignacion() {
+      const panel = $('#asig');
+      panel.classList.remove('is-on');
+      setTimeout(() => { if (!panel.classList.contains('is-on')) panel.hidden = true; }, 200);
+    }
+
+    async function confirmarAsignacion(e) {
+      const boton = e.currentTarget;
+      const operador = $('input[name="asig-op"]:checked');
+      const unidad = Number($('#asig-unidad')?.value);
+      if (!operador || !unidad) {
+        mostrarAviso('Elige un operador y una unidad.');
+        return;
+      }
+      boton.disabled = true;
+      try {
+        const v = await api(`/viajes/${asignacion.viaje.id}/asignar`, {
+          method: 'PATCH',
+          body: { operador_id: Number(operador.value), unidad_id: unidad }
+        });
+        $('#asig-estado').textContent = '✓ Viaje asignado';
+        $('#asig-cuerpo').replaceChildren(el('p', { class: 'asig__listo' },
+          el('b', { text: v.folio }), ` quedó asignado a ${v.operador} con la unidad ${v.placas}. `,
+          'Avisamos al chofer y a quien creó el viaje (si activaron sus avisos).'));
+        $('#asig-pie').replaceChildren(
+          el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: (ev) => qrParaCliente(v, ev.currentTarget) }, 'QR para el cliente'),
+          el('a', { href: '#monitoreo', class: 'btn btn--ghost btn--sm', onclick: cerrarAsignacion }, 'Ver en monitoreo'),
+          el('button', { type: 'button', class: 'btn btn--accent btn--sm', onclick: cerrarAsignacion }, 'Listo'));
+        $('#asig-pie .btn--accent').focus();
+        cargarSeccion({ silencioso: true });
+        if (location.hash !== '#ruta') cargarPorAsignar().catch(() => {});
+      } catch (error) {
+        mostrarAviso(error.message);
+        boton.disabled = false;
+      }
+    }
+
+    // El cliente recibe avisos desde su página de rastreo («Avísame»): aquí se genera el QR para enviárselo
+    async function qrParaCliente(v, boton) {
+      boton.disabled = true;
+      try {
+        const base = new URL('.', location.href).href;
+        const { url, qr_svg: qr } = await api(`/viajes/${v.id}/rastreo`, { method: 'POST', body: { base } });
+        boton.remove();
+        $('#asig-cuerpo').append(el('div', { class: 'asis-qr' },
+          el('small', { class: 'muted', text: 'Envíalo al cliente: al abrirlo puede pulsar «Avísame» y recibirá los avisos de su envío.' }),
+          el('img', { alt: `Código QR para rastrear ${v.folio}`, src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qr)}` }),
+          el('a', { class: 'mono', href: url, target: '_blank', rel: 'noopener', text: url }),
+          navigator.share && el('button', {
+            type: 'button', class: 'btn btn--accent btn--sm',
+            onclick: () => navigator.share({ title: `Rastreo ${v.folio} · Trazzo`, text: `Sigue tu envío ${v.folio} en vivo:`, url }).catch(() => {})
+          }, 'Compartir enlace')));
+      } catch (error) {
+        mostrarAviso(error.message);
+        boton.disabled = false;
+      }
     }
 
     function iniciarAsignacion() {
-      $('#as-viaje').addEventListener('change', () => {
-        viajeParaAsignar = Number($('#as-viaje').value);
-        mostrarViajeElegido();
+      $('#asig-cerrar').addEventListener('click', cerrarAsignacion);
+      $('#asig-cuerpo').addEventListener('change', () => {
+        const boton = $('#asig-confirmar');
+        if (boton) boton.disabled = !asignacionLista();
       });
-      $('#as-unidad').addEventListener('change', mostrarUnidad);
-      $('#as-operadores').addEventListener('change', (e) => {
-        $('#res-operador').textContent = e.target.dataset.nombre || '—';
-      });
-
-      $('#confirmar-viaje').addEventListener('click', async (e) => {
-        const viaje = viajeElegido();
-        const operador = $('input[name="op"]:checked');
-        const unidad = Number($('#as-unidad').value);
-        if (!viaje || !operador || !unidad) {
-          mostrarAviso('Elige un viaje, un operador y una unidad.');
-          return;
-        }
-
-        const boton = e.currentTarget;
-        boton.disabled = true;
-        try {
-          const v = await api(`/viajes/${viaje.id}/asignar`, {
-            method: 'PATCH',
-            body: { operador_id: Number(operador.value), unidad_id: unidad }
-          });
-          viajeParaAsignar = null;
-          location.hash = '#monitoreo';
-          mostrarAviso(`${v.folio} asignado a ${v.operador} con la unidad ${v.placas}.`);
-        } catch (error) {
-          mostrarAviso(error.message);
-        } finally {
-          boton.disabled = false;
-        }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !$('#asig').hidden && !$('dialog[open]')) cerrarAsignacion();
       });
     }
 
@@ -1548,20 +1592,44 @@
     let conversacion = [];
     const MAX_HISTORIAL = 18;
 
+    // Primero se usa el asistente con IA (/asistente). Si no está configurado, sin saldo o sin servicio (503),
+    // la conversación sigue con el chatbot por palabras clave (/chatbot), que no tiene costo.
+    let modoAsistente = 'ia';
+
     const SUGERENCIAS = {
-      oficina: [
-        'Resumen de operación de hoy',
-        '¿Qué viajes van con retraso?',
-        'Viajes pendientes por asignar',
-        'Ayuda'
-      ],
-      operador: [
-        'Mis viajes',
-        '¿Cuál es mi viaje actual?',
-        'Reportar retraso en TRZ-0142 por tráfico',
-        'Ayuda'
-      ]
+      ia: {
+        oficina: [
+          '¿Qué viajes van con retraso y por qué?',
+          '¿Qué operador está libre para un viaje de 12 toneladas?',
+          'Comparte el rastreo del último viaje en ruta',
+          'Resumen de operación de hoy'
+        ],
+        operador: [
+          '¿Cuál es mi viaje actual?',
+          '¿A qué hora debo llegar?',
+          'Reporta retraso en mi viaje por tráfico'
+        ]
+      },
+      basico: {
+        oficina: [
+          'Resumen de operación de hoy',
+          '¿Qué viajes van con retraso?',
+          'Viajes pendientes por asignar',
+          'Ayuda'
+        ],
+        operador: [
+          'Mis viajes',
+          '¿Cuál es mi viaje actual?',
+          'Reportar retraso en TRZ-0142 por tráfico',
+          'Ayuda'
+        ]
+      }
     };
+
+    function pintarModoAsistente() {
+      const etiqueta = $('#asis-titulo small');
+      if (etiqueta) etiqueta.textContent = modoAsistente === 'ia' ? 'Con IA' : 'Sin coste';
+    }
 
     function mensajeAsistente(rol, contenido) {
       const caja = $('#asis-mensajes');
@@ -1584,6 +1652,14 @@
       if (p.tipo === 'estado') {
         const v = await api(`/viajes/${p.datos.viaje_id}/estado`, { method: 'PATCH', body: { estado: p.datos.estado, nota: p.datos.nota } });
         return `${v.folio}: ${ESTADOS[v.estado].texto.toLowerCase()}.`;
+      }
+      if (p.tipo === 'rastreo') {
+        const base = new URL('.', location.href).href;
+        const { url, qr_svg: qr } = await api(`/viajes/${p.datos.viaje_id}/rastreo`, { method: 'POST', body: { base } });
+        mensajeAsistente('asistente', el('div', { class: 'asis-qr' },
+          el('img', { alt: `Código QR para rastrear ${p.datos.folio}`, src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(qr)}` }),
+          el('a', { class: 'mono', href: url, target: '_blank', rel: 'noopener', text: url })));
+        return `Rastreo de ${p.datos.folio} listo: envía el QR o el enlace al cliente.`;
       }
       throw new Error('Acción desconocida');
     }
@@ -1638,7 +1714,18 @@
       boton.disabled = true;
 
       try {
-        const { respuesta, propuestas } = await api('/chatbot', { method: 'POST', body: { mensajes: conversacion } });
+        const consultar = () => api(modoAsistente === 'ia' ? '/asistente' : '/chatbot', { method: 'POST', body: { mensajes: conversacion } });
+        let resultado;
+        try {
+          resultado = await consultar();
+        } catch (error) {
+          if (modoAsistente !== 'ia' || error.status !== 503) throw error;
+          modoAsistente = 'basico';
+          pintarModoAsistente();
+          mensajeAsistente('asistente', el('small', { class: 'muted', text: `La IA no está disponible (${error.message}). Sigo con el chatbot básico.` }));
+          resultado = await consultar();
+        }
+        const { respuesta, propuestas } = resultado;
         pensando.replaceChildren(respuesta);
         conversacion.push({ rol: 'asistente', texto: respuesta });
         propuestas.forEach((p) => mensajeAsistente('asistente', tarjetaPropuesta(p)));
@@ -1654,9 +1741,12 @@
     function reiniciarAsistente() {
       conversacion = [];
       const usuario = usuarioActual();
-      $('#asis-mensajes').replaceChildren(el('div', { class: 'asis-msg asis-msg--asistente' },
-        `Hola${usuario ? `, ${usuario.nombre.split(' ')[0]}` : ''}. Soy el ChatBot de Trazzo (sin coste). Puedo consultar viajes, flota y ayudarte a iniciar, asignar, reportar retraso o entregar viajes. Escribe "ayuda" para ver comandos.`));
-      const lista = SUGERENCIAS[esOficina() ? 'oficina' : 'operador'];
+      const hola = `Hola${usuario ? `, ${usuario.nombre.split(' ')[0]}` : ''}.`;
+      $('#asis-mensajes').replaceChildren(el('div', { class: 'asis-msg asis-msg--asistente' }, modoAsistente === 'ia'
+        ? `${hola} Soy el asistente de Trazzo con IA. Pregúntame lo que necesites de los viajes y la flota con tus palabras. Puedo preparar registros, asignaciones, cambios de estado y el QR de rastreo para el cliente; tú los confirmas.`
+        : `${hola} Soy el ChatBot de Trazzo (sin coste). Puedo consultar viajes, flota y ayudarte a iniciar, asignar, reportar retraso o entregar viajes. Escribe "ayuda" para ver comandos.`));
+      pintarModoAsistente();
+      const lista = SUGERENCIAS[modoAsistente][esOficina() ? 'oficina' : 'operador'];
       $('#asis-sugerencias').replaceChildren(...lista.map((s) => el('button', { type: 'button', class: 'asis-chip', onclick: () => preguntar(s) }, s)));
       $('#asis-sugerencias').hidden = false;
     }
@@ -1724,6 +1814,104 @@
       });
     }
 
+    /* ---------- PWA: notificaciones push ---------- */
+    // Avisos cuando un viaje se asigna, inicia, cambia de estado o está por llegar (los manda el backend con Web Push).
+    // Requieren HTTPS (o localhost) y el Service Worker; en iPhone, además, la app instalada en la pantalla de inicio.
+    const pushSoportado = () => window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    const claveAvisos = (usuario) => `trazzo-avisos:${usuario?.id}`; // recuerda en este equipo quién los activó
+
+    // La clave pública VAPID viene en base64url; pushManager.subscribe() la necesita en bytes
+    function claveABytes(base64url) {
+      const base64 = (base64url + '='.repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+      return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    }
+
+    async function suscripcionPush(clave) {
+      const registro = await navigator.serviceWorker.getRegistration();
+      if (!registro) throw new Error('La app aún no termina de instalarse. Recarga la página e inténtalo de nuevo.');
+      const bytes = claveABytes(clave);
+      const suscripcion = await registro.pushManager.getSubscription();
+      const anterior = suscripcion?.options?.applicationServerKey;
+      const mismaClave = anterior && new Uint8Array(anterior).every((b, i) => b === bytes[i]) && anterior.byteLength === bytes.length;
+      if (suscripcion && mismaClave) return suscripcion;
+      await suscripcion?.unsubscribe(); // era de otra clave del servidor: se renueva
+      return registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+    }
+
+    function pintarBotonAvisos(activo) {
+      const boton = $('#btn-avisos');
+      boton.setAttribute('aria-pressed', String(activo));
+      boton.querySelector('span').textContent = activo ? 'Avisos activos' : 'Activar avisos';
+    }
+
+    async function actualizarBotonAvisos(usuario) {
+      const boton = $('#btn-avisos');
+      if (!boton) return;
+      boton.hidden = !usuario || !pushSoportado();
+      if (boton.hidden) return;
+      let activo = false;
+      try { activo = localStorage.getItem(claveAvisos(usuario)) === '1'; } catch { /* sin almacenamiento */ }
+      activo = activo && Notification.permission === 'granted';
+      pintarBotonAvisos(activo);
+      if (!activo) return;
+      // Ya estaban activados en este equipo: se vuelve a registrar la suscripción para este usuario
+      try {
+        const { clave } = await api('/push/clave');
+        const suscripcion = await suscripcionPush(clave);
+        await api('/push/suscripcion', { method: 'POST', body: { suscripcion: suscripcion.toJSON() } });
+      } catch { pintarBotonAvisos(false); }
+    }
+
+    // Con fetch directo (no api()): si la sesión ya expiró no debe volver a llamar a cerrarSesion()
+    function quitarAvisosDelServidor() {
+      const token = sesion.leer()?.token;
+      if (!token || !pushSoportado()) return;
+      navigator.serviceWorker.getRegistration()
+        .then((registro) => registro?.pushManager.getSubscription())
+        .then((suscripcion) => suscripcion && fetch(`${API_URL}/push/suscripcion`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ endpoint: suscripcion.endpoint })
+        }))
+        .catch(() => {});
+      pintarBotonAvisos(false);
+    }
+
+    function iniciarNotificaciones() {
+      const boton = $('#btn-avisos');
+      if (!boton) return;
+      boton.addEventListener('click', async () => {
+        const usuario = usuarioActual();
+        boton.disabled = true;
+        try {
+          if (boton.getAttribute('aria-pressed') === 'true') {
+            const suscripcion = await (await navigator.serviceWorker.getRegistration())?.pushManager.getSubscription();
+            if (suscripcion) await api('/push/suscripcion', { method: 'DELETE', body: { endpoint: suscripcion.endpoint } });
+            try { localStorage.removeItem(claveAvisos(usuario)); } catch { /* sin almacenamiento */ }
+            pintarBotonAvisos(false);
+            mostrarAviso('Avisos desactivados en este equipo.');
+            return;
+          }
+          const { disponible, clave } = await api('/push/clave');
+          if (!disponible) throw new Error('El servidor no tiene configuradas las notificaciones (claves VAPID en .env).');
+          if (await Notification.requestPermission() !== 'granted') {
+            throw new Error('Permite las notificaciones de este sitio en el navegador para recibir avisos.');
+          }
+          const suscripcion = await suscripcionPush(clave);
+          await api('/push/suscripcion', { method: 'POST', body: { suscripcion: suscripcion.toJSON() } });
+          try { localStorage.setItem(claveAvisos(usuario), '1'); } catch { /* sin almacenamiento */ }
+          pintarBotonAvisos(true);
+          mostrarAviso(esOficina()
+            ? 'Listo: te avisaremos de los viajes que crees o asignes: cuando se asignen, inicien, cambien de estado o estén por llegar.'
+            : 'Listo: te avisaremos cuando te asignen un viaje y cuando cambie su estado.');
+        } catch (error) {
+          mostrarAviso(error.message);
+        } finally {
+          boton.disabled = false;
+        }
+      });
+    }
+
     /* ---------- PWA: aviso de conexión ---------- */
     function iniciarAvisoConexion() {
       const aviso = $('#aviso-offline');
@@ -1757,7 +1945,9 @@
         $('#btn-actualizar').onclick = () => worker.postMessage('actualizar');
       };
 
-      window.addEventListener('load', async () => {
+      // Este archivo lo carga js/app.js DESPUÉS de los parciales, cuando el evento «load» puede haber pasado ya:
+      // si la página ya cargó, se registra en ese momento; si no, al terminar de cargar
+      const registrar = async () => {
         try {
           const registro = await navigator.serviceWorker.register('sw.js');
           if (registro.waiting && navigator.serviceWorker.controller) ofrecerActualizacion(registro.waiting);
@@ -1772,7 +1962,9 @@
           // Mientras la app está abierta, busca versiones nuevas cada hora
           setInterval(() => registro.update(), 60 * 60 * 1000);
         } catch { /* sin soporte en este hospedaje */ }
-      });
+      };
+      if (document.readyState === 'complete') registrar();
+      else window.addEventListener('load', registrar);
     }
 
     /* ---------- Arranque ---------- */
@@ -1790,6 +1982,7 @@
       iniciarDetalle();
       iniciarInstalacion();
       iniciarAvisoConexion();
+      iniciarNotificaciones();
       iniciarNavegacionConDatos();
       iniciarAsistente();
     }

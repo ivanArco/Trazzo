@@ -1,2 +1,16 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Asignación rápida: aparece al guardar una ruta o al tocar un viaje por asignar (en cualquier pantalla) -->
+  <aside class="asig" id="asig" role="dialog" aria-labelledby="asig-titulo" hidden>
+    <header class="asig__head">
+      <div>
+        <small class="asig__ok" id="asig-estado"></small>
+        <h2 id="asig-titulo"><span class="mono c-accent" id="asig-folio">—</span> Asignar operador y unidad</h2>
+        <p class="muted" id="asig-ruta">—</p>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm" id="asig-cerrar" aria-label="Cerrar asignación">✕</button>
+    </header>
+    <div class="asig__cuerpo" id="asig-cuerpo"></div>
+    <footer class="asig__pie" id="asig-pie"></footer>
+  </aside>
   <!-- ===================== JAVASCRIPT ===================== -->

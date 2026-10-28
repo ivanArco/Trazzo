@@ -3,8 +3,7 @@
 
     <nav class="nav__links" id="menu" aria-label="Principal">
       <a href="#tablero"><svg class="i" aria-hidden="true"><use href="#i-home" /></svg>Tablero</a>
-      <a href="#ruta" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-route" /></svg>Nueva ruta</a>
-      <a href="#asignar" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg>Asignación<em id="nav-por-asignar" hidden></em></a>
+      <a href="#ruta" data-rol="admin capturista"><svg class="i" aria-hidden="true"><use href="#i-route" /></svg>Rutas<em id="nav-por-asignar" hidden></em></a>
       <a href="#monitoreo"><svg class="i" aria-hidden="true"><use href="#i-monitor" /></svg>Monitoreo</a>
       <a href="#trafico" data-rol="admin"><svg class="i" aria-hidden="true"><use href="#i-traffic" /></svg>Tráfico</a>
       <a href="#historial" data-rol="admin capturista operador"><svg class="i" aria-hidden="true"><use href="#i-clock" /></svg>Historial</a>
@@ -16,6 +15,7 @@
     <div class="nav__tools">
       <label class="search"><svg class="i" aria-hidden="true"><use href="#i-search" /></svg><input type="search" id="buscar" placeholder="Buscar folio, ciudad…" aria-label="Buscar viajes por folio, ciudad u operador"><span class="kbd">Ctrl K</span></label>
       <button type="button" class="btn btn--ghost btn--sm js-instalar" hidden><svg class="i" aria-hidden="true"><use href="#i-phone" /></svg><span>Instalar app</span></button>
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-avisos" hidden aria-pressed="false" title="Notificaciones cuando un viaje se asigna, inicia, cambia de estado o está por llegar"><svg class="i" aria-hidden="true"><use href="#i-bell" /></svg><span>Activar avisos</span></button>
       <span class="clock"><span class="live"></span><time id="reloj">—</time></span>
       <div class="nav__user">
         <span class="av" aria-hidden="true" id="usuario-iniciales">—</span>

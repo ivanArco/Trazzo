@@ -29,9 +29,9 @@ export const cambiarEstado = async (req, res) => {
   res.json(await viajeService.cambiarEstado(Number(req.params.id), req.body, req.usuario));
 };
 
-// El origen del frontend (encabezado Origin) sirve para armar el enlace del QR
+// La dirección del frontend (con su carpeta) sirve para armar el enlace del QR; si no llega, el encabezado Origin
 export const activarRastreo = async (req, res) => {
-  res.json(await rastreoService.activar(Number(req.params.id), req.get('origin')));
+  res.json(await rastreoService.activar(Number(req.params.id), req.body?.base || req.get('origin')));
 };
 
 export const desactivarRastreo = async (req, res) => {

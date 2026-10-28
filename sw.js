@@ -1,6 +1,6 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v2.9';
+const CACHE = 'trazzo-v3.4';
 // Caché de las consultas a la API: la llena la página (js/trazzo-core.js) y se conserva entre versiones
 const CACHE_API = 'trazzo-api';
 
@@ -74,4 +74,31 @@ self.addEventListener('fetch', (e) => {
       return respuesta;
     }))
   );
+});
+
+// Notificaciones push: el backend manda { title, body, url, tag } cuando un viaje cambia
+self.addEventListener('push', (e) => {
+  let aviso = {};
+  try { aviso = e.data?.json() ?? {}; } catch { aviso = { body: e.data?.text() }; }
+  e.waitUntil(self.registration.showNotification(aviso.title || 'Trazzo', {
+    body: aviso.body || '',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    lang: 'es-MX',
+    tag: aviso.tag,               // un aviso por viaje: el nuevo reemplaza al anterior
+    renotify: Boolean(aviso.tag), // pero vuelve a sonar/vibrar
+    data: { url: aviso.url || './' }
+  }));
+});
+
+// Al tocar el aviso: enfoca la ventana que ya estaba abierta en esa página o abre una nueva
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const destino = new URL(e.notification.data?.url || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ventanas) => {
+    const abierta = ventanas.find((v) => v.url.split('#')[0] === destino.split('#')[0]);
+    if (!abierta) return self.clients.openWindow(destino);
+    if (abierta.url !== destino && 'navigate' in abierta) abierta.navigate(destino).catch(() => {});
+    return abierta.focus();
+  }));
 });

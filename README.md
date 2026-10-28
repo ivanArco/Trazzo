@@ -93,7 +93,7 @@ trazzo/
 | Tema de emprendimiento | Sección «Cómo funciona» → «Por qué nace Trazzo» (problema, solución, impacto) |
 | Encabezado con logotipo | `<header class="nav">` |
 | Menú de navegación | `<nav class="nav__links">` (en teléfono, botón ☰) |
-| Secciones | Tablero, Nueva ruta, Asignación, Monitoreo, Personal y roles, Cómo funciona |
+| Secciones | Tablero, Rutas (registro + asignación rápida), Monitoreo, Tráfico, Historial, Flota, Personal y roles, Cómo funciona |
 | Pie de página | `<footer class="foot">` |
 | Responsivo | `css/styles.css`, sección 16: 1440, 1280, 1100, 960, 720 y 560 px |
 | Colores consistentes | Variables en `:root` (modo oscuro y claro automáticos) |
@@ -178,18 +178,36 @@ En el seguimiento de un viaje, «Compartir rastreo» crea un enlace secreto (tok
 código QR, generado en el servidor. El cliente lo abre en su celular (`rastreo.html?t=...`) sin cuenta y ve el
 avance, el camión sobre el mapa, la hora de llegada y el historial, actualizado cada 15 s. La vista pública
 oculta datos internos (flete, placas, notas, nombres del personal) y el enlace se puede desactivar; caduca
-3 días después de la entrega. Para escanear el QR con un celular en el mismo wifi, el backend usa la IP local
-de la computadora; si publicas el frontend, pon su dirección en `PUBLIC_URL` (`.env`).
+3 días después de la entrega.
 
-**Asistente con IA (Claude)**
+El enlace del QR se arma así: 1) `PUBLIC_URL` del `.env` si existe; 2) si la app se usa desde una dirección
+pública (GitLab Pages, Render), esa dirección con su carpeta (`usuario.gitlab.io/trazzo/`); 3) en desarrollo,
+el propio backend con la IP del wifi (`http://192.168.x.x:3000/rastreo.html?t=...`), que también sirve la
+página. Así el celular la abre aunque el frontend corra en Live Server. Si el celular no carga, permite a Node.js
+en el Firewall de Windows (red privada) y revisa que esté en el mismo wifi.
+
+**Pregunta sobre tu envío (IA para el cliente):** si hay `ANTHROPIC_API_KEY`, la página de rastreo muestra un
+chat donde el cliente pregunta («¿a qué hora llega?», «¿por qué va con retraso?»). Claude responde solo con
+los datos públicos de ese envío, sin herramientas (no puede ver otros viajes ni cambiar nada). Límites:
+300 caracteres por pregunta, 6 preguntas por minuto por IP y 40 por hora por envío.
+
+**Asistente con IA (Gemini o Claude)**
+
+La IA del chat y la de la página de rastreo usan **Google Gemini** (`IA_PROVEEDOR=gemini`, plan gratis) o
+**Claude** (`IA_PROVEEDOR=claude`). Para Gemini, crea tu clave en https://aistudio.google.com («Get API key»)
+y ponla en `GEMINI_API_KEY`; el modelo se cambia con `GEMINI_MODEL` (por defecto `gemini-3.5-flash-lite`, rápido; `gemini-3.8-flash` es más capaz pero en el plan gratis puede tardar mucho). Ambos usan
+las mismas herramientas, instrucciones y tarjetas de «Confirmar» (`geminiService.js` traduce al formato de
+Gemini). Si se acaba el cupo gratis o la clave falla, el chat pasa solo al chatbot sin coste. En el plan gratis
+de Gemini, Google puede usar lo que se envía para mejorar sus productos: no lo uses con datos sensibles reales.
 
 El botón «Asistente» abre un chat donde se pregunta en lenguaje natural («¿qué viajes van con retraso?»,
 «registra un viaje de Puebla a Oaxaca mañana a las 8»). El backend (`asistenteService.js`) usa el modelo
 `claude-opus-5-5` con herramientas que consultan los datos reales respetando el rol de quien pregunta.
 Las acciones que cambian datos solo se **proponen**: aparecen como tarjetas con «Confirmar» y, al confirmar,
-el frontend llama a los endpoints normales (mismas validaciones y permisos). Requiere `ANTHROPIC_API_KEY`
-en `.env` (tiene costo por uso; máximo 15 preguntas por minuto por usuario). Sin clave, el resto de la app
-funciona igual. Si los filtros de seguridad de Anthropic rechazan una petición, la API reintenta
+el frontend llama a los endpoints normales (mismas validaciones y permisos). También puede preparar el QR de
+rastreo de un viaje («comparte el rastreo de TRZ-0142») y mostrarlo en el chat. Requiere `ANTHROPIC_API_KEY`
+en `.env` (tiene costo por uso; máximo 15 preguntas por minuto por usuario). Sin clave, sin saldo o sin
+servicio, el chat cambia solo al chatbot por palabras clave (`/api/chatbot`, sin coste). Si los filtros de seguridad de Anthropic rechazan una petición, la API reintenta
 automáticamente con otro modelo (`fallbacks: "default"`).
 
 **Seguridad extra:** el inicio de sesión admite 10 intentos fallidos cada 15 minutos por IP.
@@ -218,6 +236,10 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | POST | `/api/viajes/:id/rastreo` | Admin / capturista | Activa el rastreo público → `{ url, qr_svg }` |
 | DELETE | `/api/viajes/:id/rastreo` | Admin / capturista | Desactiva el enlace (el QR deja de funcionar) |
 | GET | `/api/rastreo/:token` | **Público** | Avance del envío para el cliente (máx. 30 consultas/min por IP) |
+| POST | `/api/rastreo/:token/pregunta` | **Público** | `{ pregunta, historial }` → `{ respuesta }` · IA solo con datos públicos del envío (6/min por IP, 40/h por envío) |
+| POST / DELETE | `/api/rastreo/:token/push` | **Público** | `{ suscripcion }` / `{ endpoint }` · el cliente activa o quita los avisos de su envío |
+| GET | `/api/push/clave` | Público | `{ disponible, clave }` · clave pública VAPID |
+| POST / DELETE | `/api/push/suscripcion` | Admin / capturista / operador | `{ suscripcion }` / `{ endpoint }` · avisos de viajes para el personal |
 | POST | `/api/asistente` | Admin / capturista / operador | `{ mensajes: [{ rol, texto }] }` → `{ respuesta, propuestas }` |
 | GET | `/api/rutas/estimar` | Admin / capturista | `?origen=&destino=&gps_origen=&gps_destino=` → distancia, tiempo y trazo de la ruta |
 | GET | `/api/trafico/estado` | Administrador | ¿Hay clave de TomTom? y consultas usadas hoy |
@@ -234,5 +256,6 @@ Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token
 | Instalable | `manifest.json` + botón propio «Instalar app» (evento `beforeinstallprompt`) en el encabezado y en el acceso |
 | Sin conexión | El Service Worker guarda la interfaz; las últimas consultas a la API se guardan con la **Cache API** (caché `trazzo-api`) y se muestran sin red, con un aviso «Sin conexión» |
 | Aviso de versión nueva | Al publicar cambios aparece «Hay una nueva versión · Actualizar»; la app se recarga solo cuando el usuario lo decide |
+| Notificaciones push | Web Push con claves VAPID (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` en `.env`; genéralas con `npx web-push generate-vapid-keys`). Avisan cuando un viaje se asigna, inicia, cambia de estado, llega al 90 % del recorrido («está por llegar») o se entrega. Llegan solo a los involucrados de cada viaje: quien lo creó, quien lo asignó, el chofer (y el chofer anterior si se reasigna) y el cliente de su QR (botón «Avísame» en `rastreo.html`, sin notas internas); quien hace el cambio no recibe su propio aviso. Al asignar, el panel ofrece «QR para el cliente». Botón «Activar avisos» en el encabezado. Requieren HTTPS o `localhost`; en iPhone, la app agregada a la pantalla de inicio |
 | Datos en vivo | Tablero, monitoreo y el seguimiento abierto se refrescan cada 10 s (se pausa si la pestaña no está visible) |
 | Cache API para la API | `api()` en `js/trazzo-core.js` pide siempre a la red; si responde bien guarda una copia en `caches.open('trazzo-api')`, y sin red devuelve esa copia. Se borra al cerrar sesión y el Service Worker no la elimina al cambiar de versión |

@@ -4,6 +4,9 @@ import { enTransaccion } from '../config/db.js';
 import * as viajeModel from '../models/viajeModel.js';
 import * as flotaModel from '../models/flotaModel.js';
 import { camposPorEstado } from './viajeService.js';
+import { avisarViaje } from './notificacionService.js';
+
+const CERCA_DEL_DESTINO = 90; // % del recorrido a partir del cual se avisa «está por llegar»
 
 const azar = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 
@@ -40,6 +43,13 @@ async function moverViaje(viaje) {
     }
     if (evento) await viajeModel.registrarEvento(viaje.id, evento[0], evento[1], null, conexion);
   });
+
+  // Notificaciones: cambios de estado y el momento en que cruza el 90 % del recorrido
+  if (evento && ['en_ruta', 'retraso', 'entregado'].includes(evento[0])) {
+    avisarViaje(viaje.id, evento[0], { reanuda: evento[0] === 'en_ruta' });
+  } else if (estado !== 'entregado' && viaje.avance < CERCA_DEL_DESTINO && avance >= CERCA_DEL_DESTINO) {
+    avisarViaje(viaje.id, 'cerca');
+  }
 }
 
 export function iniciarSimulador(segundos) {

@@ -1502,6 +1502,82 @@ body:has(.screen:target) .login {
 .asis-propuesta ul { margin: 0; padding-left: 18px; font-size: .85rem; }
 .asis-propuesta .actions { justify-content: flex-start; }
 
+/* Rutas: franja de viajes «Por asignar» (cada uno abre la asignación rápida) */
+.por-asignar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+
+.por-asignar__t { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: .85rem; color: var(--accent); }
+.por-asignar__lista { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.por-asignar__viaje {
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.por-asignar__viaje:hover,
+.por-asignar__viaje:focus-visible { border-color: var(--accent); }
+.por-asignar__viaje b { font-size: .78rem; color: var(--accent); }
+.por-asignar__viaje span { font-size: .85rem; }
+.por-asignar__viaje small { font-size: .72rem; }
+
+/* Asignación rápida: panel tipo toast abajo a la derecha (hoja inferior en el celular) */
+.asig {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 150;
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .45);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .2s, transform .2s;
+}
+
+.asig.is-on { opacity: 1; transform: none; }
+.asig__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px 10px; }
+.asig__head h2 { font-size: 1rem; margin: 2px 0; }
+.asig__head p { margin: 0; font-size: .82rem; }
+.asig__ok { color: var(--go); font-weight: 600; font-size: .78rem; }
+.asig__cuerpo { display: grid; gap: 10px; padding: 0 16px; overflow-y: auto; }
+.asig__cuerpo h3 { margin: 4px 0 0; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.asig__ops { max-height: 236px; overflow-y: auto; }
+.asig__ops label { padding: 8px 10px; gap: 10px; }
+.asig__listo { margin: 4px 0 6px; }
+.asig__pie { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
+
+@media (max-width: 720px) {
+  .asig { right: 0; bottom: 0; width: 100%; max-height: 85vh; border-radius: var(--radius) var(--radius) 0 0; }
+}
+
+/* QR de rastreo generado desde el asistente */
+.asis-qr { display: grid; gap: 8px; justify-items: start; white-space: normal; }
+.asis-qr img { width: 168px; height: 168px; background: #fff; border-radius: 10px; padding: 6px; }
+.asis-qr a { font-size: .78rem; word-break: break-all; color: var(--info); }
+
 .asis-sugerencias {
   display: flex;
   flex-wrap: wrap;

@@ -96,6 +96,17 @@
 
     .rastreo__aviso h1 { font-size: 1.2rem; margin: 0 0 6px; }
     .rastreo__aviso p { margin: 0; color: var(--muted); }
+
+    /* Pregunta sobre tu envío (asistente con IA; reutiliza los estilos .asis-* del chat de la app) */
+    .rastreo__asis { padding: 0; overflow: hidden; }
+    .rastreo__asis .panel__head { padding: 14px 14px 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .rastreo__asis .panel__head small { color: var(--muted); font-size: .75rem; }
+    #rt-mensajes { max-height: 320px; }
+    #rt-mensajes:empty { display: none; }
+
+    /* Botón de notificaciones del cliente */
+    .rastreo__avisos { justify-content: center; white-space: normal; text-align: center; }
+    .rastreo__avisos[aria-pressed="true"] { border-color: var(--go); color: var(--go); }
   </style>
 </head>
 
@@ -103,6 +114,7 @@
   <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
     <symbol id="i-logo" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#12306b" /><path d="M120 150h272v58H286v184h-60V208H120z" fill="#fff" /><path d="M312 300h80l-40 70z" fill="#ff8a1f" /></symbol>
     <symbol id="i-truck" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12v11H2zM14 9h4l4 4v3h-8" /><circle cx="6.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></g></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0" /></symbol>
   </svg>
 
   <main class="rastreo">
@@ -127,6 +139,8 @@
         </div>
       </article>
 
+      <button type="button" class="btn btn--ghost rastreo__avisos" id="rt-avisos" hidden aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-bell" /></svg><span>Avísame cuando mi envío inicie, cambie o esté por llegar</span></button>
+
       <div class="panel" id="panel-mapa" hidden>
         <div class="map" id="mapa" role="img" aria-label="Mapa con el recorrido del envío y la posición aproximada del camión"></div>
       </div>
@@ -139,6 +153,16 @@
         <header class="panel__head"><h2>Historial</h2></header>
         <ul class="feed" id="eventos"></ul>
       </div>
+
+      <section class="panel rastreo__asis" id="panel-asis" aria-labelledby="rt-asis-titulo" hidden>
+        <header class="panel__head"><h2 id="rt-asis-titulo">Pregunta sobre tu envío</h2><small>Responde con IA · solo con los datos de este envío</small></header>
+        <div class="asis-mensajes" id="rt-mensajes" aria-live="polite"></div>
+        <div class="asis-sugerencias" id="rt-sugerencias"></div>
+        <form class="asis-form" id="rt-form">
+          <textarea name="texto" rows="2" maxlength="300" required placeholder="Por ejemplo: ¿a qué hora llega mi carga?" aria-label="Tu pregunta sobre el envío"></textarea>
+          <button type="submit" class="btn btn--accent btn--sm">Enviar</button>
+        </form>
+      </section>
     </div>
 
     <p class="rastreo__pie">Se actualiza solo cada 15 segundos · Posición aproximada · Mapa © OpenStreetMap</p>
@@ -151,9 +175,16 @@
        ========================================================== */
     'use strict';
 
-    // Misma computadora o red local: el backend está en el puerto 3000 del mismo equipo.
-    // Al publicar el backend en internet, cambia esta línea por su dirección.
-    const API_URL = `${location.protocol}//${location.hostname}:3000/api`;
+    // Dónde está la API (misma regla que js/trazzo-core.js):
+    //   · servidor de archivos de desarrollo (Live Server 5500/5501, python 8000/8080) → puerto 3000 del mismo equipo
+    //   · otra dirección local o Render: la página la sirve el propio backend → la misma dirección
+    //   · publicada en otro hosting (GitLab Pages) → el backend publicado en Render
+    const API_PUBLICA = 'https://trazzo-vosj.onrender.com/api';
+    const RED_LOCAL = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
+    const SERVIDOR_DE_ARCHIVOS = ['5500', '5501', '8000', '8080'].includes(location.port);
+    const API_URL = RED_LOCAL.test(location.hostname)
+      ? (SERVIDOR_DE_ARCHIVOS ? `${location.protocol}//${location.hostname}:3000/api` : `${location.origin}/api`)
+      : location.hostname.endsWith('.onrender.com') ? `${location.origin}/api` : API_PUBLICA;
     const token = new URLSearchParams(location.search).get('t') || '';
 
     const $ = (sel) => document.querySelector(sel);
@@ -288,6 +319,156 @@
 
       pintarMapa(envio);
       $('#actualizado').textContent = `Actualizado ${fmtHora.format(new Date())}`;
+      if (envio.asistente) iniciarAsistente(envio);
+      iniciarAvisos(envio);
+    }
+
+    /* ---------- Notificaciones del envío (Web Push) ---------- */
+    // Requieren HTTPS (o localhost); en iPhone, además, agregar la página a la pantalla de inicio
+    const CLAVE_AVISOS = `trazzo-rastreo-avisos:${token}`;
+    const pushSoportado = () => window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    let avisosListos = false;
+
+    function claveABytes(base64url) {
+      const base64 = (base64url + '='.repeat((4 - (base64url.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+      return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    }
+
+    function pintarAvisos(activo) {
+      const boton = $('#rt-avisos');
+      boton.setAttribute('aria-pressed', String(activo));
+      boton.querySelector('span').textContent = activo
+        ? 'Avisos activos · toca para desactivarlos'
+        : 'Avísame cuando mi envío inicie, cambie o esté por llegar';
+    }
+
+    async function suscripcionPush(clave) {
+      const registro = await navigator.serviceWorker.ready;
+      const bytes = claveABytes(clave);
+      const suscripcion = await registro.pushManager.getSubscription();
+      const anterior = suscripcion?.options?.applicationServerKey;
+      const mismaClave = anterior && anterior.byteLength === bytes.length && new Uint8Array(anterior).every((b, i) => b === bytes[i]);
+      if (suscripcion && mismaClave) return suscripcion;
+      await suscripcion?.unsubscribe();
+      return registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes });
+    }
+
+    async function enviarSuscripcion(metodo, cuerpo) {
+      const respuesta = await fetch(`${API_URL}/rastreo/${encodeURIComponent(token)}/push`, {
+        method: metodo, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo)
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.message || `Error ${respuesta.status}`);
+    }
+
+    function iniciarAvisos(envio) {
+      const boton = $('#rt-avisos');
+      boton.hidden = !envio.push || !pushSoportado() || envio.estado === 'entregado';
+      if (boton.hidden || avisosListos) return;
+      avisosListos = true;
+      let activo = false;
+      try { activo = localStorage.getItem(CLAVE_AVISOS) === '1' && Notification.permission === 'granted'; } catch { /* sin almacenamiento */ }
+      pintarAvisos(activo);
+
+      boton.addEventListener('click', async () => {
+        boton.disabled = true;
+        try {
+          if (boton.getAttribute('aria-pressed') === 'true') {
+            const suscripcion = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+            if (suscripcion) await enviarSuscripcion('DELETE', { endpoint: suscripcion.endpoint });
+            try { localStorage.removeItem(CLAVE_AVISOS); } catch { /* sin almacenamiento */ }
+            pintarAvisos(false);
+            return;
+          }
+          if (await Notification.requestPermission() !== 'granted') {
+            throw new Error('Permite las notificaciones de esta página en tu navegador para recibir avisos.');
+          }
+          const suscripcion = await suscripcionPush(envio.push);
+          await enviarSuscripcion('POST', { suscripcion: suscripcion.toJSON() });
+          try { localStorage.setItem(CLAVE_AVISOS, '1'); } catch { /* sin almacenamiento */ }
+          pintarAvisos(true);
+        } catch (error) {
+          boton.querySelector('span').textContent = error.message;
+        } finally {
+          boton.disabled = false;
+        }
+      });
+    }
+
+    // El Service Worker de la PWA recibe los avisos (y permite abrir la página sin conexión)
+    if (window.isSecureContext && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    /* ---------- Pregunta sobre tu envío (IA) ---------- */
+    let conversacion = [];
+    let asistenteListo = false;
+
+    function sugerenciasPara(estado) {
+      if (estado === 'entregado') return ['¿Cuándo se entregó?', '¿Quién entregó mi carga?'];
+      if (['pendiente', 'asignado'].includes(estado)) return ['¿Cuándo sale mi envío?', '¿Cuánto tarda el viaje?'];
+      return ['¿A qué hora llega?', estado === 'retraso' ? '¿Por qué va con retraso?' : '¿Va a tiempo?', '¿Cuánto le falta?'];
+    }
+
+    function burbuja(rol, texto, clase) {
+      const div = document.createElement('div');
+      div.className = `asis-msg asis-msg--${rol}${clase ? ` ${clase}` : ''}`;
+      div.textContent = texto;
+      $('#rt-mensajes').append(div);
+      $('#rt-mensajes').scrollTop = $('#rt-mensajes').scrollHeight;
+      return div;
+    }
+
+    async function preguntarIA(texto) {
+      const form = $('#rt-form');
+      const boton = form.querySelector('button');
+      burbuja('usuario', texto);
+      $('#rt-sugerencias').hidden = true;
+      const pensando = burbuja('asistente', 'Revisando tu envío…', 'asis-pensando');
+      boton.disabled = true;
+      try {
+        const respuesta = await fetch(`${API_URL}/rastreo/${encodeURIComponent(token)}/pregunta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pregunta: texto, historial: conversacion })
+        });
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) throw new Error(datos.message || `Error ${respuesta.status}`);
+        pensando.className = 'asis-msg asis-msg--asistente';
+        pensando.textContent = datos.respuesta;
+        conversacion.push({ rol: 'usuario', texto }, { rol: 'asistente', texto: datos.respuesta });
+        conversacion = conversacion.slice(-6);
+      } catch (error) {
+        pensando.className = 'asis-msg asis-msg--asistente err';
+        pensando.textContent = navigator.onLine ? error.message : 'Sin conexión: inténtalo cuando vuelva la señal.';
+      } finally {
+        boton.disabled = false;
+      }
+    }
+
+    function iniciarAsistente(envio) {
+      if (asistenteListo) return;
+      asistenteListo = true;
+      $('#panel-asis').hidden = false;
+      $('#rt-sugerencias').replaceChildren(...sugerenciasPara(envio.estado).map((s) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'asis-chip';
+        chip.textContent = s;
+        chip.addEventListener('click', () => preguntarIA(s));
+        return chip;
+      }));
+      const form = $('#rt-form');
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const texto = form.texto.value.trim();
+        if (!texto) return;
+        form.texto.value = '';
+        preguntarIA(texto);
+      });
+      form.texto.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+      });
     }
 
     async function cargar() {
