@@ -119,3 +119,20 @@ CREATE TABLE IF NOT EXISTS ubicaciones_panico (
   KEY alerta (alerta_id),
   CONSTRAINT fk_ubicacion_alerta FOREIGN KEY (alerta_id) REFERENCES alertas_panico (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Notificaciones push: cada navegador (o teléfono) donde un usuario activó las notificaciones.
+-- endpoint es la dirección única que da el servicio push del navegador; p256dh y auth son las
+-- claves para cifrar el mensaje. Si el navegador la da de baja, el servidor la borra al enviar.
+CREATE TABLE IF NOT EXISTS suscripciones_push (
+  id INT NOT NULL AUTO_INCREMENT,
+  usuario_id INT NOT NULL,
+  endpoint VARCHAR(700) NOT NULL,
+  p256dh VARCHAR(255) NOT NULL,
+  auth VARCHAR(100) NOT NULL,
+  navegador VARCHAR(255) NULL,              -- user-agent, para saber en qué equipo está
+  creada_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY endpoint (endpoint),
+  KEY usuario (usuario_id),
+  CONSTRAINT fk_push_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

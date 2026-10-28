@@ -64,3 +64,18 @@
   <div class="banda banda--offline" id="aviso-offline" role="status" hidden>Sin conexión · se muestran los últimos datos guardados</div>
   <div class="banda banda--version" id="aviso-version" role="status" hidden>Hay una nueva versión de Trazzo <button type="button" class="btn btn--accent btn--sm" id="btn-actualizar">Actualizar</button></div>
   
+  <!-- ===================== NOTIFICACIONES PUSH ===================== -->
+  <dialog class="dialog" id="dlg-push" aria-labelledby="t-dlg-push">
+    <div class="form">
+      <h2 id="t-dlg-push">Notificaciones</h2>
+      <p class="muted">Recibe avisos de Trazzo en este dispositivo aunque la app esté cerrada. Los administradores reciben aquí las alertas del botón de pánico.</p>
+      <p class="push-estado" id="push-estado" role="status"></p>
+      <p class="err" id="err-push" role="alert" hidden></p>
+      <div class="dialog__acciones">
+        <button type="button" class="btn btn--ghost" id="push-cerrar">Cerrar</button>
+        <button type="button" class="btn btn--ghost" id="push-desactivar" hidden>Desactivar</button>
+        <button type="button" class="btn btn--ghost" id="push-probar" hidden>Enviar prueba</button>
+        <button type="button" class="btn btn--accent" id="push-activar">Activar</button>
+      </div>
+    </div>
+  </dialog>

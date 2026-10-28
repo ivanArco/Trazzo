@@ -6,6 +6,7 @@ import { enTransaccion } from '../config/db.js';
 import * as panicoModel from '../models/panicoModel.js';
 import * as viajeModel from '../models/viajeModel.js';
 import { HttpError } from '../utils/httpError.js';
+import { enviarARoles } from './pushService.js';
 
 const RESOLUCIONES = { atendida: 'atendida', falsa_alarma: 'falsa alarma' };
 
@@ -33,7 +34,7 @@ export async function activar(datos = {}, usuario) {
   const ubicacion = leerUbicacion(datos);
   const nota = texto(datos.nota);
 
-  return enTransaccion(async (conexion) => {
+  const resultado = await enTransaccion(async (conexion) => {
     await panicoModel.bloquearOperador(usuario.id, conexion);
 
     const existente = await panicoModel.activaDeOperador(usuario.id, conexion);
@@ -52,6 +53,24 @@ export async function activar(datos = {}, usuario) {
     }
     return { alerta: await panicoModel.buscarPorId(id, conexion), nueva: true };
   });
+
+  // Notificación push a los administradores (aunque tengan la app cerrada). Se envía después de
+  // guardar la alerta y sin esperarla: si el servicio push falla, la alerta ya quedó registrada.
+  if (resultado.nueva) notificarAdmins(resultado.alerta);
+  return resultado;
+}
+
+function notificarAdmins(alerta) {
+  const detalle = [alerta.folio, alerta.placas, alerta.nota].filter(Boolean).join(' · ');
+  enviarARoles(['admin'], {
+    titulo: `🚨 Botón de pánico: ${alerta.operador}`,
+    cuerpo: detalle || 'Sin viaje activo',
+    url: './#tablero',
+    etiqueta: `panico-${alerta.id}`,
+    urgente: true,
+    urgencia: 'high',
+    ttl: 24 * 60 * 60
+  }).catch((error) => console.error('Push de pánico no enviada:', error.message));
 }
 
 // La app manda la ubicación cada ~30 s mientras la alerta siga activa

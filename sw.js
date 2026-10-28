@@ -1,6 +1,6 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v2.10';
+const CACHE = 'trazzo-v2.11';
 // Caché de las consultas a la API: la llena la página (js/trazzo-core.js) y se conserva entre versiones
 const CACHE_API = 'trazzo-api';
 
@@ -75,4 +75,35 @@ self.addEventListener('fetch', (e) => {
       return respuesta;
     }))
   );
+});
+
+// Notificaciones push: el servidor envía { titulo, cuerpo, url, etiqueta, urgente } cifrado al
+// servicio push del navegador, que despierta a este Service Worker aunque Trazzo esté cerrada.
+self.addEventListener('push', (e) => {
+  let datos = {};
+  try { datos = e.data ? e.data.json() : {}; } catch { datos = { cuerpo: e.data?.text() }; }
+
+  e.waitUntil(self.registration.showNotification(datos.titulo || 'Trazzo', {
+    body: datos.cuerpo || '',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    tag: datos.etiqueta,                       // una notificación nueva con la misma etiqueta reemplaza a la anterior
+    renotify: Boolean(datos.etiqueta),
+    requireInteraction: Boolean(datos.urgente), // las alertas de pánico no se ocultan solas
+    vibrate: datos.urgente ? [300, 120, 300, 120, 600] : [150],
+    data: { url: datos.url || './' },
+    lang: 'es-MX'
+  }));
+});
+
+// Al tocar la notificación: si Trazzo ya está abierta se enfoca y va a la sección; si no, se abre
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const destino = new URL(e.notification.data?.url || './', self.registration.scope).href;
+
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ventanas) => {
+    const abierta = ventanas.find((v) => v.url.startsWith(self.registration.scope));
+    if (abierta) return abierta.focus().then((v) => v.navigate?.(destino) ?? v);
+    return self.clients.openWindow(destino);
+  }));
 });

@@ -2319,3 +2319,18 @@ body:has(.screen:target) .login {
 @media (prefers-reduced-motion: reduce) {
   .panico { animation: none; }
 }
+
+/* ---------- 20. Notificaciones push ---------- */
+#btn-notificaciones.is-on { color: var(--go); border-color: var(--go); }
+.push-estado { margin: 0; }
+#dlg-push .muted { margin: 0; font-size: .9rem; }
+
+@media (max-width: 1280px) {
+  #btn-notificaciones span { display: none; }   /* en pantallas medianas y celular, solo la campana */
+  #btn-notificaciones { padding: 0 10px; }
+}
+
+@media (max-width: 560px) {
+  #dlg-push .dialog__acciones { flex-wrap: wrap; }
+  #dlg-push .dialog__acciones .btn { flex: 1 1 auto; }
+}

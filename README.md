@@ -89,7 +89,27 @@ pueden ir como `\n`). Después corre `pnpm migrar` una vez para crear o actualiz
 > La app móvil **nunca** se conecta a MySQL: habla con esta API. La contraseña de la base solo vive en el `.env`
 > del backend.
 
+### Notificaciones push
+
+Avisos del sistema operativo que llegan aunque Trazzo esté cerrada (estándar Web Push con claves VAPID).
+
+- **Activar:** campana del encabezado → «Activar». El navegador pide permiso, se suscribe con la clave pública
+  VAPID y la suscripción se guarda en `suscripciones_push`. «Enviar prueba» manda una notificación al propio
+  usuario y «Desactivar» la da de baja. Al cerrar sesión, el dispositivo se da de baja solo.
+- **Alerta de pánico:** cuando un operador activa el botón de pánico, todos los administradores con
+  notificaciones activas reciben «🚨 Botón de pánico: <operador>», que no se oculta sola. Al tocarla se abre Trazzo.
+- **Backend:** `pushService.js` (librería `web-push`) firma y cifra cada mensaje y lo envía al servicio push del
+  navegador; si una suscripción ya no existe (404/410) se borra. Rutas `/api/push`.
+- **Service Worker:** eventos `push` (muestra la notificación) y `notificationclick` (abre o enfoca la app).
+- **Configuración:** genera las claves con `npx web-push generate-vapid-keys` y ponlas en `Backend/.env`
+  (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`). Requiere HTTPS (o localhost). En iPhone solo
+  funcionan con la app instalada en la pantalla de inicio (iOS 16.4 o posterior).
+
 ### Arreglos
+
+- **El Service Worker no se registraba** (venía de la separación en `partials/`): se registraba en el evento
+  `load`, que ya había ocurrido cuando se carga `js/trazzo-core.js`. Sin él no había funcionamiento sin conexión,
+  aviso de versión nueva ni instalación. Ahora se registra de inmediato si la página ya cargó.
 
 - **Recargar en una sección mostraba la pantalla de acceso** (venía de la separación en `partials/`): al
   recargar, el navegador buscaba el `#ancla` antes de que existieran los parciales. `js/app.js` vuelve a la
@@ -99,7 +119,7 @@ pueden ir como `\n`). Después corre `pnpm migrar` una vez para crear o actualiz
 - **El panel del ChatBot tapaba el encabezado:** ahora abre debajo del encabezado y arriba del botón en todos
   los tamaños (sección 18 de `css/styles.css`, solo posición; su funcionamiento no cambió).
 - El filtro de «Monitoreo» tomaba todos los botones `.seg` de la página; ahora solo los que tienen `data-filtro`.
-- `sw.js` pasa a `trazzo-v2.10` para que los navegadores descarguen los archivos nuevos.
+- `sw.js` pasa a `trazzo-v2.11` para que los navegadores descarguen los archivos nuevos.
 
 ### Entorno local y cuentas de prueba
 
@@ -279,6 +299,10 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | GET | `/api/panico` | Administrador | Alertas (`?estado=activa`, `atendida`, `falsa_alarma`) |
 | GET | `/api/panico/:id` | Administrador | Alerta con su recorrido (`ubicaciones`) |
 | PATCH | `/api/panico/:id` | Administrador | `{ estado: 'atendida' \| 'falsa_alarma', resolucion? }`; `409` si ya estaba cerrada |
+| GET | `/api/push/clave` | Con sesión | `{ configurado, clave_publica }` (clave VAPID pública para suscribirse) |
+| POST | `/api/push/suscripcion` | Con sesión | Guarda la suscripción del navegador `{ endpoint, keys: { p256dh, auth } }` |
+| DELETE | `/api/push/suscripcion` | Con sesión | `{ endpoint }` → da de baja ese dispositivo |
+| POST | `/api/push/prueba` | Con sesión | Envía una notificación de prueba al propio usuario (máx. 5/min); `409` sin dispositivos |
 
 Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token en `Authorization: Bearer <token>`. Su dirección se configura en la constante `API_URL` de `index.html`.
 

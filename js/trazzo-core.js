@@ -356,6 +356,8 @@
     }
 
     function cerrarSesion() {
+      const token = sesion.leer()?.token;
+      if (token && pushDisponible()) olvidarDispositivoPush(token);
       sesion.borrar();
       cacheApi.borrar();
       $('#asis-panel').hidden = true;
@@ -1203,6 +1205,107 @@
       setInterval(() => { if (navigator.onLine) revisarPanico(); }, 10000);
     }
 
+    /* ---------- Notificaciones push ---------- */
+    // El navegador se suscribe con la clave pública VAPID del servidor y le entrega su suscripción
+    // (endpoint + claves). Con ella el backend envía avisos, como las alertas de pánico a los
+    // administradores, que el Service Worker muestra aunque Trazzo esté cerrada.
+    const pushDisponible = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+    // La clave VAPID viaja en base64 «url-safe»; pushManager.subscribe() la necesita en bytes
+    function claveEnBytes(base64) {
+      const relleno = '='.repeat((4 - (base64.length % 4)) % 4);
+      const binario = atob((base64 + relleno).replace(/-/g, '+').replace(/_/g, '/'));
+      return Uint8Array.from(binario, (c) => c.charCodeAt(0));
+    }
+
+    async function suscripcionPush() {
+      const registro = await navigator.serviceWorker.getRegistration();
+      return registro ? registro.pushManager.getSubscription() : null;
+    }
+
+    async function pintarEstadoPush() {
+      const suscripcion = await suscripcionPush().catch(() => null);
+      const permiso = Notification.permission;
+      const activa = Boolean(suscripcion) && permiso === 'granted';
+      const estado = $('#push-estado');
+      estado.textContent = permiso === 'denied'
+        ? 'Bloqueaste las notificaciones de Trazzo en este navegador. Para activarlas, permítelas en la configuración del sitio (el ícono junto a la dirección).'
+        : activa ? 'Activadas en este dispositivo.' : 'Desactivadas en este dispositivo.';
+      estado.className = `push-estado st st--${activa ? 'go' : permiso === 'denied' ? 'alert' : 'done'}`;
+      $('#push-activar').hidden = activa || permiso === 'denied';
+      $('#push-probar').hidden = !activa;
+      $('#push-desactivar').hidden = !activa;
+      $('#btn-notificaciones').classList.toggle('is-on', activa);
+    }
+
+    async function activarPush() {
+      const permiso = await Notification.requestPermission();
+      if (permiso !== 'granted') return;
+      const { configurado, clave_publica: clave } = await api('/push/clave');
+      if (!configurado) throw new Error('El servidor todavía no tiene configuradas las notificaciones push.');
+      const registro = await navigator.serviceWorker.ready;
+      const suscripcion = await registro.pushManager.getSubscription()
+        || await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveEnBytes(clave) });
+      await api('/push/suscripcion', { method: 'POST', body: suscripcion.toJSON() });
+      mostrarAviso('Notificaciones activadas en este dispositivo.');
+    }
+
+    async function desactivarPush() {
+      const suscripcion = await suscripcionPush();
+      if (!suscripcion) return;
+      await api('/push/suscripcion', { method: 'DELETE', body: { endpoint: suscripcion.endpoint } }).catch(() => {});
+      await suscripcion.unsubscribe();
+      mostrarAviso('Notificaciones desactivadas en este dispositivo.');
+    }
+
+    // Al cerrar sesión el dispositivo deja de recibir avisos (se usa el token antes de borrarlo)
+    async function olvidarDispositivoPush(token) {
+      const suscripcion = await suscripcionPush().catch(() => null);
+      if (!suscripcion) return;
+      await fetch(`${API_URL}/push/suscripcion`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ endpoint: suscripcion.endpoint })
+      }).catch(() => {});
+      await suscripcion.unsubscribe().catch(() => {});
+    }
+
+    function iniciarPush() {
+      const boton = $('#btn-notificaciones');
+      if (!boton) return;
+      const mostrarBoton = () => { boton.hidden = !pushDisponible() || !usuarioActual(); };
+      mostrarBoton();
+      window.addEventListener('hashchange', mostrarBoton);
+      if (!pushDisponible()) return;
+
+      const accion = (trabajo) => async () => {
+        const error = $('#err-push');
+        error.hidden = true;
+        try {
+          await trabajo();
+        } catch (e) {
+          error.textContent = e.message;
+          error.hidden = false;
+        } finally {
+          pintarEstadoPush();
+        }
+      };
+
+      boton.addEventListener('click', () => {
+        $('#err-push').hidden = true;
+        $('#dlg-push').showModal();
+        pintarEstadoPush();
+      });
+      $('#push-cerrar').addEventListener('click', () => $('#dlg-push').close());
+      $('#push-activar').addEventListener('click', accion(activarPush));
+      $('#push-desactivar').addEventListener('click', accion(desactivarPush));
+      $('#push-probar').addEventListener('click', accion(async () => {
+        await api('/push/prueba', { method: 'POST' });
+        mostrarAviso('Prueba enviada: la notificación debe aparecer en unos segundos.');
+      }));
+      pintarEstadoPush();
+    }
+
     function iniciarFormRuta() {
       const form = $('#form-ruta');
       if (!form) return;
@@ -1952,7 +2055,7 @@
         $('#btn-actualizar').onclick = () => worker.postMessage('actualizar');
       };
 
-      window.addEventListener('load', async () => {
+      const registrar = async () => {
         try {
           const registro = await navigator.serviceWorker.register('sw.js');
           if (registro.waiting && navigator.serviceWorker.controller) ofrecerActualizacion(registro.waiting);
@@ -1967,7 +2070,12 @@
           // Mientras la app está abierta, busca versiones nuevas cada hora
           setInterval(() => registro.update(), 60 * 60 * 1000);
         } catch { /* sin soporte en este hospedaje */ }
-      });
+      };
+
+      // Este archivo lo carga js/app.js después de insertar los parciales, cuando la página casi
+      // siempre ya terminó de cargar: si el evento «load» ya pasó, se registra de inmediato
+      if (document.readyState === 'complete') registrar();
+      else window.addEventListener('load', registrar);
     }
 
     /* ---------- Arranque ---------- */
@@ -1983,6 +2091,7 @@
       iniciarFlota();
       iniciarTrafico();
       iniciarPanico();
+      iniciarPush();
       iniciarDetalle();
       iniciarInstalacion();
       iniciarAvisoConexion();
