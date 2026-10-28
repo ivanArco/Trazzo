@@ -12,6 +12,7 @@ import rastreoRoutes from './routes/rastreoRouter.js';
 import asistenteRoutes from './routes/asistenteRouter.js';
 import chatbotRoutes from './routes/chatbotRouter.js';
 import traficoRoutes from './routes/traficoRouter.js';
+import panicoRoutes from './routes/panicoRouter.js';
 
 // Obtener la ruta equivalente a __dirname para ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +42,7 @@ app.use('/api/rutas', rutaRoutes);
 app.use('/api/asistente', asistenteRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/trafico', traficoRoutes);
+app.use('/api/panico', panicoRoutes);
 
 // 2. Servir el index.html en la raíz (/)
 app.get('/', (req, res) => {

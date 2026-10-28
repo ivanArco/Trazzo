@@ -541,7 +541,7 @@
       $('#mapa-texto').textContent = n ? `${n} unidad${n === 1 ? '' : 'es'} en movimiento · posición simulada` : 'Sin unidades en movimiento';
     }
 
-    const claseEvento = (tipo) => ({ retraso: 'alert', creado: 'wait', cancelado: 'alert' }[tipo] || '');
+    const claseEvento = (tipo) => ({ retraso: 'alert', creado: 'wait', cancelado: 'alert', panico: 'alert' }[tipo] || '');
 
     function pintarEventos(eventos) {
       const feed = $('#feed-alertas');
@@ -896,8 +896,11 @@
     }
 
     async function mostrarViajeTrafico(id) {
-      const datos = await api(`/trafico/viajes/${id}`);
+      // La selección se fija antes de pedir los datos: si el refresco automático y un clic se
+      // cruzan, la respuesta que llegue tarde de un viaje que ya no está elegido se descarta
       viajeTraficoId = id;
+      const datos = await api(`/trafico/viajes/${id}`);
+      if (viajeTraficoId !== id) return;
       $$('#tr-lista .tr-item').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.id) === id)));
       pintarMapaTrafico(datos);
       pintarDetalleTrafico(datos);
@@ -1006,6 +1009,198 @@
           if (capa && mapaTrafico) activa ? capa.addTo(mapaTrafico) : capa.remove();
         });
       });
+    }
+
+    /* ---------- Botón de pánico: aviso para administradores ---------- */
+    // El operador activa la alerta desde la app móvil. Aquí se revisa cada 10 s, también con la
+    // pestaña en segundo plano, y el aviso suena hasta que alguien lo silencia o lo cierra.
+    let alertasPanico = [];
+    let alertaPanicoId = null;            // la alerta abierta en el diálogo
+    let alertaPanicoEncuadrada = null;    // el mapa solo se reencuadra al cambiar de alerta
+    const panicoSilenciadas = new Set();  // alertas que ya no suenan en esta pestaña
+    let mapaPanico = null;
+    let capaPanico = null;
+    let sonidoPanico = null;
+    const tituloOriginal = document.title;
+
+    async function revisarPanico() {
+      if (usuarioActual()?.rol !== 'admin') {
+        alertasPanico = [];
+      } else {
+        try {
+          alertasPanico = await api('/panico?estado=activa');
+        } catch {
+          return; // sin red se queda el último aviso
+        }
+      }
+      pintarAvisoPanico();
+      if ($('#dlg-panico').open && alertaPanicoId) abrirPanico(alertaPanicoId).catch(() => { /* se reintenta en 10 s */ });
+    }
+
+    function pintarAvisoPanico() {
+      const activas = alertasPanico;
+      $('#panico-aviso').hidden = !activas.length;
+      document.title = activas.length ? `(${activas.length}) Alerta de pánico · ${tituloOriginal}` : tituloOriginal;
+      if (!activas.length) {
+        detenerSonidoPanico();
+        return;
+      }
+
+      const primera = activas[0];
+      $('#panico-titulo').textContent = activas.length > 1 ? `${activas.length} alertas de pánico activas` : 'Botón de pánico activado';
+      $('#panico-detalle').textContent = [primera.operador, primera.folio, primera.placas, haceCuanto(primera.creada_en)]
+        .filter(Boolean).join(' · ');
+
+      const porSonar = activas.some((a) => !panicoSilenciadas.has(a.id));
+      $('#panico-silenciar').hidden = !porSonar;
+      if (porSonar) sonarPanico();
+      else detenerSonidoPanico();
+    }
+
+    // Pitido con Web Audio (sin archivos). Si el navegador no deja sonar sin un clic previo,
+    // se reanuda en el siguiente clic; mientras tanto queda el aviso visual.
+    function sonarPanico() {
+      if (sonidoPanico) return;
+      try {
+        const contexto = new (window.AudioContext || window.webkitAudioContext)();
+        const pitido = () => {
+          const oscilador = contexto.createOscillator();
+          const volumen = contexto.createGain();
+          oscilador.type = 'square';
+          oscilador.frequency.value = 880;
+          volumen.gain.value = 0.06;
+          oscilador.connect(volumen).connect(contexto.destination);
+          oscilador.start();
+          oscilador.stop(contexto.currentTime + 0.25);
+        };
+        pitido();
+        sonidoPanico = { contexto, intervalo: setInterval(pitido, 1500) };
+      } catch { /* sin audio */ }
+    }
+
+    function detenerSonidoPanico() {
+      if (!sonidoPanico) return;
+      clearInterval(sonidoPanico.intervalo);
+      sonidoPanico.contexto.close().catch(() => {});
+      sonidoPanico = null;
+    }
+
+    async function abrirPanico(id) {
+      const alerta = await api(`/panico/${id}`);
+      const cambio = alertaPanicoId !== id;
+      alertaPanicoId = id;
+
+      const lista = $('#panico-lista');
+      lista.hidden = alertasPanico.length < 2;
+      lista.replaceChildren(...alertasPanico.map((a) => el('button', {
+        type: 'button',
+        class: 'tr-item',
+        'aria-pressed': String(a.id === id),
+        onclick: () => abrirPanico(a.id).catch((error) => mostrarAviso(error.message))
+      },
+      el('span', { class: 'tr-item__cabeza' },
+        el('span', { class: 'mono', text: a.folio || 'Sin viaje' }),
+        el('span', { class: 'st st--alert', text: haceCuanto(a.creada_en) })),
+      el('span', { class: 'tr-item__ruta', text: a.operador }))));
+
+      const fila = (titulo, ...valor) => [el('dt', { text: titulo }), el('dd', {}, ...valor)];
+      $('#panico-datos').replaceChildren(
+        ...fila('Operador', alerta.operador),
+        ...fila('Viaje', alerta.folio ? `${alerta.folio} · ${ciudad(alerta.origen)} → ${ciudad(alerta.destino)}` : 'Sin viaje activo'),
+        ...fila('Unidad', alerta.placas ? `${alerta.placas} · ${alerta.marca_modelo}` : '—'),
+        ...fila('Activada', `${hora(alerta.creada_en)} (${haceCuanto(alerta.creada_en)})`),
+        ...fila('Última ubicación', alerta.lat != null
+          ? [`${hora(alerta.ubicacion_en)}${alerta.precision_m ? ` · ±${alerta.precision_m} m` : ''} · `,
+            el('a', { href: `https://www.google.com/maps?q=${alerta.lat},${alerta.lon}`, target: '_blank', rel: 'noopener', text: 'Abrir en Google Maps' })]
+          : 'El teléfono no envió ubicación GPS'),
+        ...(alerta.nota ? fila('Nota del operador', alerta.nota) : []),
+        ...(alerta.estado !== 'activa' ? fila('Cerrada por', `${alerta.atendio || '—'} · ${hora(alerta.atendida_en)}`) : [])
+      );
+
+      if (cambio) {
+        $('#panico-nota').value = '';
+        $('#err-panico').hidden = true;
+      }
+      const activa = alerta.estado === 'activa';
+      $('#panico-atender').disabled = !activa;
+      $('#panico-falsa').disabled = !activa;
+
+      const dialogo = $('#dlg-panico');
+      if (!dialogo.open) dialogo.showModal();
+      pintarMapaPanico(alerta);
+    }
+
+    function pintarMapaPanico(alerta) {
+      const contenedor = $('#panico-mapa');
+      const puntos = alerta.ubicaciones.map((u) => [u.lat, u.lon]);
+      contenedor.hidden = !puntos.length || !window.L;
+      if (contenedor.hidden) return;
+
+      if (!mapaPanico) {
+        mapaPanico = L.map(contenedor);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 18,
+          attribution: '© OpenStreetMap'
+        }).addTo(mapaPanico);
+      }
+      mapaPanico.invalidateSize();
+
+      const ultimo = puntos.at(-1);
+      capaPanico?.remove();
+      capaPanico = L.layerGroup([
+        L.polyline(puntos, { color: colorTema('--alert'), weight: 4, opacity: 0.8, dashArray: '4 6' }),
+        alerta.precision_m ? L.circle(ultimo, { radius: alerta.precision_m, color: colorTema('--alert'), weight: 1, fillOpacity: 0.15 }) : null,
+        L.circleMarker(ultimo, { radius: 9, color: '#fff', weight: 3, fillColor: colorTema('--alert'), fillOpacity: 1 })
+          .bindTooltip(`Última ubicación · ${hora(alerta.ubicacion_en)}`)
+      ].filter(Boolean)).addTo(mapaPanico);
+
+      if (alertaPanicoEncuadrada !== alerta.id) {
+        if (puntos.length > 1) mapaPanico.fitBounds(L.latLngBounds(puntos), { padding: [30, 30], maxZoom: 16 });
+        else mapaPanico.setView(ultimo, 15);
+        alertaPanicoEncuadrada = alerta.id;
+      }
+    }
+
+    async function cerrarPanico(estado) {
+      const botones = [$('#panico-atender'), $('#panico-falsa')];
+      const error = $('#err-panico');
+      botones.forEach((b) => { b.disabled = true; });
+      error.hidden = true;
+      try {
+        await api(`/panico/${alertaPanicoId}`, {
+          method: 'PATCH',
+          body: { estado, resolucion: $('#panico-nota').value.trim() || undefined }
+        });
+        $('#dlg-panico').close();
+        mostrarAviso(estado === 'atendida' ? 'Alerta marcada como atendida.' : 'Alerta marcada como falsa alarma.');
+        await revisarPanico();
+      } catch (e) {
+        error.textContent = e.message;
+        error.hidden = false;
+        botones.forEach((b) => { b.disabled = false; });
+      }
+    }
+
+    function iniciarPanico() {
+      if (!$('#panico-aviso')) return;
+
+      $('#panico-ver').addEventListener('click', () => {
+        if (alertasPanico[0]) abrirPanico(alertasPanico[0].id).catch((e) => mostrarAviso(e.message));
+      });
+      $('#panico-silenciar').addEventListener('click', () => {
+        alertasPanico.forEach((a) => panicoSilenciadas.add(a.id));
+        pintarAvisoPanico();
+      });
+      $('#panico-cerrar').addEventListener('click', () => $('#dlg-panico').close());
+      $('#dlg-panico').addEventListener('close', () => { alertaPanicoId = null; });
+      $('#panico-atender').addEventListener('click', () => cerrarPanico('atendida'));
+      $('#panico-falsa').addEventListener('click', () => cerrarPanico('falsa_alarma'));
+      document.addEventListener('click', () => sonidoPanico?.contexto.resume().catch(() => {}));
+
+      // Al iniciar o cerrar sesión cambia el ancla: se revisa de inmediato
+      window.addEventListener('hashchange', revisarPanico);
+      revisarPanico();
+      setInterval(() => { if (navigator.onLine) revisarPanico(); }, 10000);
     }
 
     function iniciarFormRuta() {
@@ -1787,6 +1982,7 @@
       iniciarHistorial();
       iniciarFlota();
       iniciarTrafico();
+      iniciarPanico();
       iniciarDetalle();
       iniciarInstalacion();
       iniciarAvisoConexion();

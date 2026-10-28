@@ -19,6 +19,7 @@ async function boot() {
     inject('app-dialogs','partials/dialogs.html'),
     inject('app-chatbot','partials/chatbot.html'),
     inject('app-toast',  'partials/toast.html'),
+    inject('app-panico', 'partials/panico.html'),
   ]);
 
   // Al recargar en una sección (#tablero, #trafico…) el navegador buscó el ancla antes de que

@@ -4,7 +4,7 @@
   "description": "API de Trazzo · Centro de Control",
   "main": "src/server.js",
   "scripts": {
-    "dev": "node --watch src/server.js",
+    "dev": "node --watch-path=src src/server.js",
     "start": "node src/server.js",
     "migrar": "node database/migrar.js"
   },

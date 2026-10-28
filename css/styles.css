@@ -2228,3 +2228,94 @@ body:has(.screen:target) .login {
 @media (max-width: 480px) {
   .asis-panel { height: max(280px, calc(100dvh - var(--asis-arriba) - 70px - env(safe-area-inset-bottom, 0px))); }
 }
+
+/* ---------- 19. Botón de pánico: aviso para administradores ---------- */
+/* Abajo a la izquierda para no tapar el botón del ChatBot (abajo a la derecha) */
+.panico {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 150;
+  width: min(580px, calc(100% - 220px));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--alert);
+  color: #fff;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .45);
+  animation: panico-pulso 1.6s ease-in-out infinite;
+}
+
+.panico__icono { width: 28px; height: 28px; flex-shrink: 0; }
+.panico__texto { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.panico__texto b { font-size: 1rem; }
+.panico__texto span { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panico__acciones { display: flex; gap: 8px; flex-shrink: 0; }
+.panico .btn { background: #fff; color: #b3122a; }
+.panico .btn--ghost { background: transparent; color: #fff; border-color: rgb(255 255 255 / .7); }
+
+@keyframes panico-pulso {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(255 92 108 / .55), 0 14px 40px rgba(0, 0, 0, .45); }
+  50% { box-shadow: 0 0 0 12px rgb(255 92 108 / 0), 0 14px 40px rgba(0, 0, 0, .45); }
+}
+
+.panico-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.panico-mapa {
+  height: 280px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.panico-mapa.leaflet-container { font: inherit; }
+
+.panico-datos {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: .9rem;
+}
+
+.panico-datos dt { color: var(--muted); }
+.panico-datos dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.panico-datos a { color: var(--info); }
+
+#dlg-panico textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  resize: vertical;
+}
+
+@media (max-width: 720px) {
+  .panico {
+    left: 10px;
+    right: 10px;
+    width: auto;
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap;
+  }
+
+  .panico__acciones { width: 100%; }
+  .panico__acciones .btn { flex: 1; }
+  .panico-mapa { height: 220px; }
+  .panico-datos { grid-template-columns: 1fr; gap: 2px; }
+  .panico-datos dd { margin-bottom: 6px; }
+  #dlg-panico .dialog__acciones { flex-wrap: wrap; }
+  #dlg-panico .dialog__acciones .btn { flex: 1 1 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panico { animation: none; }
+}

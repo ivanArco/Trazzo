@@ -48,6 +48,16 @@ async function agregarColumnas() {
   }
 }
 
+// 1c. Tipo de evento "panico" (botón de pánico) en bases creadas antes de que existiera
+async function agregarTipoPanico() {
+  const [[columna]] = await pool.query("SHOW COLUMNS FROM eventos_viaje LIKE 'tipo'");
+  if (columna.Type.includes("'panico'")) return;
+  await pool.query(
+    "ALTER TABLE eventos_viaje MODIFY tipo ENUM('creado', 'asignado', 'en_ruta', 'retraso', 'entregado', 'cancelado', 'avance', 'panico') NOT NULL"
+  );
+  console.log('✔ Tipo de evento agregado: panico');
+}
+
 // 2. Roles: amplía el ENUM, convierte los valores viejos y deja solo los nuevos
 async function migrarRoles() {
   const [[columna]] = await pool.query("SHOW COLUMNS FROM usuarios LIKE 'rol'");
@@ -155,6 +165,7 @@ async function cargarDemo() {
 try {
   await crearTablas();
   await agregarColumnas();
+  await agregarTipoPanico();
   await migrarRoles();
   await cifrarContraseñas();
   await cargarUnidades();
