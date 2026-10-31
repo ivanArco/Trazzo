@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "migrar": "node database/migrar.js"
+    "migrar": "node database/migrar.js",
+    "auditar:documentos": "node src/scripts/auditarArchivosDocumentos.js",
+    "comparar:ocr": "node src/scripts/compararPreprocesamientoOcr.js",
+    "probar:almacen": "node src/scripts/probarAlmacen.js",
+    "test": "node --test"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +26,7 @@
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
+    "@aws-sdk/client-s3": "^3.1158.0",
     "@google/genai": "^2.31.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -29,8 +34,11 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.1",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.5.0",
     "mysql2": "^3.24.5",
     "qrcode": "^1.5.4",
+    "sharp": "^0.34.5",
+    "tesseract.js": "^7.0.0",
     "web-push": "^3.6.7"
   }
 }

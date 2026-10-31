@@ -11,6 +11,10 @@
                                     14. Pie de página
                                     15. Avisos (toast)
                                     16. Responsivo
+                                    17. Tráfico
+                                    18. Asistente
+                                    19. Documentos
+                                    20. Revisión de documentos
    ========================================================== */
 
 /* ---------- 1. Variables ---------- */
@@ -971,6 +975,32 @@ svg.i {
   gap: 10px;
 }
 
+.doc-imagen {
+  display: block;
+  width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.doc-ocr {
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.doc-ocr-estado {
+  margin: 0;
+  color: var(--muted);
+  font-size: .85rem;
+  font-weight: 600;
+}
+
 
 /* ---------- 12. Acceso (login) ---------- */
 .login {
@@ -1279,7 +1309,8 @@ body:has(.screen:target) .login {
   font-size: .82rem;
 }
 
-.btn:disabled { opacity: .55; cursor: wait; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn[aria-busy="true"] { cursor: progress; }
 
 /* Puntos del mapa: cada viaje en ruta se dibuja según su avance */
 .map .punto { transition: cx 1s ease, cy 1s ease; }
@@ -2303,4 +2334,568 @@ body:has(.screen:target) .login {
 
 @media (max-width: 480px) {
   .asis-panel { height: max(280px, calc(100dvh - var(--asis-arriba) - 70px - env(safe-area-inset-bottom, 0px))); }
+}
+
+/* ---------- 19. Gestión de documentos y escáner ---------- */
+.doc-privacidad {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--panel-2);
+  font-size: .82rem;
+}
+
+.doc-galeria {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+}
+
+.doc-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.doc-card__imagen {
+  display: block;
+  width: 100%;
+  height: 170px;
+  object-fit: cover;
+  background: var(--bg);
+}
+
+.doc-card__contenido {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.doc-card__contenido p { margin: 0; overflow-wrap: anywhere; }
+.doc-card__titulo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.doc-card__alerta { color: var(--alert); font-weight: 600; }
+.doc-bloqueo { min-height: 1.3em; color: var(--alert); font-size: .85rem; }
+
+.doc-escaner {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+}
+
+.doc-escaner video {
+  width: min(100%, 720px);
+  max-height: 55vh;
+  margin: 0 auto;
+  border-radius: 10px;
+  background: #111;
+  object-fit: contain;
+}
+
+.doc-escaner > p { margin: 0; }
+.doc-elegir { position: relative; overflow: hidden; touch-action: manipulation; }
+.doc-elegir input { position: absolute; inset: 0; width: auto; height: auto; margin: 0; opacity: 0; cursor: pointer; }
+.doc-elegir:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dv-documentos .panel__head { align-items: center; }
+
+@media (max-width: 560px) {
+  .doc-galeria { grid-template-columns: 1fr; }
+  .doc-card__imagen { height: 210px; }
+  .doc-escaner__botones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---------- 20. Revisión de documentos ---------- */
+.doc-lista__head { flex-wrap: wrap; }
+.doc-vistas, .doc-lote, .doc-acciones, .doc-dialog__botones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.doc-tabs, .doc-review__tabs { display: flex; gap: 6px; overflow-x: auto; margin: 12px 0; border-bottom: 1px solid var(--line); }
+.doc-tabs button, .doc-review__tabs button {
+  flex: none;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.doc-tabs button[aria-selected="true"], .doc-review__tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+.doc-tabs span { margin-left: 4px; font: 600 .78rem "JetBrains Mono", monospace; }
+.doc-lote { margin: 12px 0; }
+.doc-lote > span { margin-right: auto; color: var(--muted); font-size: .85rem; }
+.doc-lote-resultados { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.doc-lote-resultados li { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 0; font-size: .85rem; }
+.doc-lote-ok { color: var(--go); }
+.doc-lote-error, .doc-ocr-error { color: var(--alert); overflow-wrap: anywhere; }
+.doc-tabla-scroll { max-width: 100%; overflow-x: auto; }
+.doc-tabla { width: 100%; min-width: 850px; border-collapse: collapse; }
+.doc-tabla th, .doc-tabla td { padding: 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.doc-tabla th { color: var(--muted); font-size: .78rem; }
+.doc-tabla td small { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+.doc-match { font-size: .82rem; overflow-wrap: anywhere; }
+.doc-match--muted { color: var(--muted); }
+.doc-match--ok { color: var(--go); }
+.doc-match--alert, .doc-rechazo { color: var(--alert); }
+.doc-acciones { align-items: flex-start; }
+.doc-acciones .btn { flex: none; }
+.doc-reintento { display: grid; gap: 6px; max-width: 220px; }
+.doc-card__media { min-height: 120px; background: var(--panel-2); }
+.doc-card__media .doc-placeholder { min-height: 150px; }
+.doc-card__titulo { flex-wrap: wrap; }
+.doc-card__titulo .doc-match { flex-basis: 100%; }
+.doc-placeholder {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 180px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+  background: var(--panel-2);
+}
+.doc-bloqueo { color: var(--info); font-size: .88rem; overflow-wrap: anywhere; }
+.doc-ocr-details { margin-bottom: 10px; }
+.doc-ocr-details summary { cursor: pointer; color: var(--info); }
+.doc-aviso-calidad { margin: 12px 0; color: var(--wait); }
+.doc-solo-lectura { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
+.doc-solo-lectura dt { color: var(--muted); font-size: .78rem; }
+.doc-solo-lectura dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.doc-dialog {
+  width: min(1180px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  overflow: hidden;
+}
+.doc-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; }
+.doc-dialog__head { display: grid; gap: 8px; padding: 18px 22px 10px; border-bottom: 1px solid var(--line); }
+.doc-dialog__head > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.doc-review { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 22px; min-height: 0; padding: 18px 22px; overflow: auto; }
+.doc-review__foto { position: sticky; top: 0; align-self: start; min-width: 0; }
+.doc-review__contenido { min-width: 0; }
+.doc-imagen { display: block; width: 100%; max-height: calc(100dvh - 250px); object-fit: contain; border-radius: 10px; background: var(--panel-2); }
+.doc-dialog__actions { position: sticky; bottom: 0; z-index: 2; display: grid; gap: 10px; padding: 12px 22px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel); }
+.doc-dialog__nota { max-width: 620px; }
+.doc-dialog__nota .f { gap: 4px; }
+.doc-dialog__nota textarea { min-height: 48px; }
+.doc-dialog__botones { justify-content: flex-end; }
+.doc-trip-item { display: grid; gap: 5px; min-width: 0; }
+.doc-trip-item > * { overflow-wrap: anywhere; }
+.doc-escaner__preview { display: block; width: min(100%, 720px); max-height: 55vh; margin: 0 auto; object-fit: contain; border: 1px solid var(--line); border-radius: 10px; }
+.doc-indicadores { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: .85rem; }
+.doc-escaner__botones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.doc-escaner__botones > * { min-width: 0; width: 100%; justify-content: center; text-align: center; }
+.doc-escaner__botones .doc-elegir { display: inline-flex; align-items: center; }
+
+@media (max-width: 720px) {
+  .doc-review { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .doc-review__foto { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+  .doc-imagen, .doc-review__foto .doc-placeholder { max-height: 30vh; min-height: 120px; }
+  .doc-dialog__actions { padding-inline: 12px; }
+}
+
+@media (max-width: 420px) {
+  .doc-escaner__botones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .doc-dialog__botones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .doc-dialog__botones .btn { width: 100%; padding-inline: 6px; font-size: .78rem; }
+  .doc-solo-lectura { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- 21. Gestión de documentos en móviles ---------- */
+@media (max-width: 600px) {
+  #documentos .wrap,
+  #documentos .panel,
+  #documentos .form,
+  #documentos .doc-tabla-scroll {
+    min-width: 0;
+  }
+
+  #documentos .panel {
+    padding: 12px;
+  }
+
+  .doc-lista__head {
+    align-items: flex-start;
+  }
+
+  .doc-lista__head h2 {
+    flex: 1 1 100%;
+  }
+
+  .doc-vistas {
+    flex: 1;
+  }
+
+  .doc-vistas .btn {
+    min-height: 42px;
+    flex: 1;
+  }
+
+  #doc-total {
+    align-self: center;
+  }
+
+  .doc-tabs {
+    margin-inline: -12px;
+    padding-inline: 12px;
+    scrollbar-width: thin;
+    overscroll-behavior-inline: contain;
+  }
+
+  .doc-tabs button {
+    min-height: 44px;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+
+  .doc-lote {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .doc-lote > span {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .doc-lote .btn,
+  .doc-acciones .btn,
+  .doc-reintento .btn {
+    min-height: 42px;
+    white-space: normal;
+  }
+
+  .doc-galeria--tarjetas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .doc-tabla-scroll {
+    overflow: visible;
+  }
+
+  .doc-tabla {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .doc-tabla thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+
+  .doc-tabla tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .doc-tabla tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+  }
+
+  .doc-tabla td {
+    display: grid;
+    grid-template-columns: minmax(78px, 30%) minmax(0, 1fr);
+    gap: 8px;
+    min-width: 0;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    overflow-wrap: anywhere;
+  }
+
+  .doc-tabla td::before {
+    color: var(--muted);
+    font-size: .76rem;
+    font-weight: 600;
+  }
+
+  .doc-tabla td:nth-child(1) {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0 0 4px;
+    border: 0;
+  }
+
+  .doc-tabla td:nth-child(2)::before { content: "Viaje"; }
+  .doc-tabla td:nth-child(3)::before { content: "Tipo"; }
+  .doc-tabla td:nth-child(4)::before { content: "Guía / coincidencia"; }
+  .doc-tabla td:nth-child(5)::before { content: "Estado"; }
+  .doc-tabla td:nth-child(6)::before { content: "Lectura OCR"; }
+
+  .doc-tabla td:nth-child(7) {
+    display: block;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .doc-tabla td:nth-child(7)::before {
+    content: "Acciones";
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .doc-tabla .doc-acciones {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .doc-tabla .doc-reintento {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .doc-escaner {
+    margin-inline: -4px;
+    padding: 10px;
+  }
+
+  #dlg-viaje {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 14px;
+  }
+
+  #dlg-viaje .dv-documentos > .panel__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #dlg-viaje .dv-documentos > .panel__head .btn {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  #doc-video,
+  .doc-escaner__preview {
+    max-height: 42dvh;
+  }
+
+  .doc-escaner__botones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .doc-escaner__botones > * {
+    min-height: 44px;
+    padding-inline: 6px;
+    font-size: .8rem;
+    overflow-wrap: anywhere;
+  }
+
+  .doc-indicadores {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    font-size: .78rem;
+  }
+
+  .doc-indicadores > *,
+  .doc-privacidad,
+  .doc-placeholder,
+  .doc-lote-resultados li {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .doc-trip-item {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  .doc-trip-item .btn {
+    min-height: 42px;
+  }
+
+  .doc-dialog {
+    width: calc(100% - 12px);
+    max-width: none;
+    max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    margin: auto;
+  }
+
+  .doc-dialog__head {
+    padding: 12px;
+  }
+
+  .doc-dialog__head h2 {
+    font-size: 1rem;
+  }
+
+  .doc-review {
+    gap: 8px;
+    padding: 10px 12px;
+    overscroll-behavior: contain;
+  }
+
+  .doc-review__foto {
+    top: 0;
+  }
+
+  .doc-imagen,
+  .doc-review__foto .doc-placeholder {
+    min-height: 96px;
+    max-height: 24dvh;
+  }
+
+  .doc-review__tabs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 6px 0 10px;
+    background: var(--panel);
+  }
+
+  .doc-review__tabs button {
+    min-height: 44px;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+
+  .doc-dialog__actions {
+    gap: 6px;
+    padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .doc-dialog__nota textarea {
+    min-height: 40px;
+    max-height: 72px;
+  }
+
+  .doc-dialog__botones {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .doc-dialog__botones .btn {
+    width: 100%;
+    min-height: 40px;
+    padding-inline: 5px;
+    font-size: .76rem;
+    white-space: normal;
+  }
+}
+
+/* ---------- 23. Galería de documentos en escritorio ---------- */
+#galeria-documentos {
+  display: block;
+  min-width: 0;
+}
+
+#galeria-documentos > .doc-tabla-scroll {
+  width: 100%;
+}
+
+@media (max-width: 360px) {
+  #documentos .panel {
+    padding: 10px;
+  }
+
+  .doc-tabs {
+    margin-inline: -10px;
+    padding-inline: 10px;
+  }
+
+  .doc-tabla td {
+    grid-template-columns: minmax(72px, 28%) minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .doc-tabla .doc-acciones {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .doc-tabla .doc-reintento {
+    grid-column: auto;
+  }
+
+  .doc-dialog__head > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* ---------- 22. Distribución vertical del modal OCR en móviles ---------- */
+@media (max-width: 600px) {
+  .doc-dialog {
+    height: calc(100dvh - 12px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    min-height: 0;
+  }
+
+  .doc-dialog[open] {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .doc-dialog__head {
+    min-height: 0;
+  }
+
+  .doc-review {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-content: start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .doc-review__foto {
+    position: static;
+    z-index: auto;
+    align-self: auto;
+    background: transparent;
+  }
+
+  .doc-review__foto .doc-imagen {
+    min-height: 0;
+    max-height: min(22dvh, 180px);
+  }
+
+  .doc-review__foto .doc-placeholder {
+    min-height: 76px;
+    max-height: min(16dvh, 120px);
+  }
+
+  .doc-review__contenido {
+    position: relative;
+    min-height: 0;
+  }
+
+  .doc-review__tabs {
+    position: static;
+  }
+
+  .doc-dialog__actions {
+    position: static;
+    z-index: auto;
+    max-height: 42dvh;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
 }

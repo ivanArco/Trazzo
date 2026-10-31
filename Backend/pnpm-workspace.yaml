@@ -5,3 +5,8 @@ allowBuilds:
   # (sin declararlos, pnpm falla en servidores de despliegue como Render)
   '@google/genai': false
   protobufjs: false
+  # tesseract.js solo tiene un postinstall de OpenCollective (opcional): no hace falta ejecutarlo
+  # Sharp comprueba sus binarios al instalarse; permitirlo para evitar fallos de procesamiento en producción.
+  sharp: true
+  # Tesseract.js solo tiene un postinstall de OpenCollective (opcional); se declara para instalaciones reproducibles.
+  tesseract.js: false

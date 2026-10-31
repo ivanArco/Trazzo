@@ -95,3 +95,56 @@ CREATE TABLE IF NOT EXISTS suscripciones_push (
   KEY viaje (viaje_id),
   CONSTRAINT fk_push_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ===== Módulo de documentos digitalizados (escaneo, OCR y revisión) =====
+-- Cada documento pertenece SIEMPRE a un viaje y a quien lo capturó (NOT NULL + RESTRICT):
+-- no se puede borrar un viaje o un usuario que tenga documentos, porque son evidencia.
+CREATE TABLE IF NOT EXISTS documentos (
+  id INT NOT NULL AUTO_INCREMENT,
+  viaje_id INT NOT NULL,
+  subido_por INT NOT NULL,
+  tipo ENUM('comprobante_entrega', 'guia_remision', 'factura', 'identificacion', 'otro') NOT NULL DEFAULT 'otro',
+  numero_guia VARCHAR(40) NULL,               -- número de guía leído por el OCR
+  coincide_viaje BOOLEAN NULL,                -- ¿lo leído coincide con el folio del viaje? (NULL = no se pudo comparar)
+  ocr_estado ENUM('procesando', 'completado', 'error') NOT NULL DEFAULT 'completado',
+  ocr_error VARCHAR(255) NULL,
+  calidad_ocr TINYINT UNSIGNED NULL,
+  texto_ocr MEDIUMTEXT NULL,                  -- transcripción completa
+  datos_json JSON NULL,                       -- fecha, receptor, monto…
+  confianza ENUM('alta', 'media', 'baja') NULL,
+  archivo_clave VARCHAR(60) NOT NULL,         -- nombre aleatorio en el almacén (disco o bucket)
+  mime VARCHAR(30) NOT NULL,
+  tamano INT NOT NULL,
+  sha256 CHAR(64) NOT NULL,                   -- huella digital: detecta si el archivo fue alterado
+  estado ENUM('pendiente', 'aprobado', 'rechazado') NOT NULL DEFAULT 'pendiente',
+  revisado_por INT NULL,
+  revisado_en DATETIME NULL,
+  nota_revision VARCHAR(255) NULL,
+  archivado_en DATETIME NULL,
+  archivado_por INT NULL,
+  motivo_archivo VARCHAR(255) NULL,
+  creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY archivo_clave (archivo_clave),
+  KEY viaje (viaje_id),
+  KEY estado (estado),
+  KEY archivado (archivado_en),
+  CONSTRAINT fk_doc_viaje FOREIGN KEY (viaje_id) REFERENCES viajes (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_doc_subio FOREIGN KEY (subido_por) REFERENCES usuarios (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_doc_revisor FOREIGN KEY (revisado_por) REFERENCES usuarios (id) ON DELETE SET NULL,
+  CONSTRAINT fk_doc_archivador FOREIGN KEY (archivado_por) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Bitácora de auditoría: quién subió, abrió, aprobó, rechazó o releyó cada documento
+CREATE TABLE IF NOT EXISTS documentos_bitacora (
+  id INT NOT NULL AUTO_INCREMENT,
+  documento_id INT NOT NULL,
+  usuario_id INT NULL,
+  accion ENUM('subido', 'visto', 'corregido', 'aprobado', 'rechazado', 'reprocesado', 'alterado', 'archivado', 'restaurado') NOT NULL,
+  nota MEDIUMTEXT NULL,
+  creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY documento (documento_id),
+  CONSTRAINT fk_bitacora_doc FOREIGN KEY (documento_id) REFERENCES documentos (id) ON DELETE CASCADE,
+  CONSTRAINT fk_bitacora_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
