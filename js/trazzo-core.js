@@ -836,15 +836,31 @@
           opacity: capa === 'flujo' ? 0.8 : 1,
           attribution: capa === 'flujo' ? 'Tráfico © TomTom' : ''
         });
-        if ($(`.seg button[data-capa="${capa}"]`)?.getAttribute('aria-pressed') !== 'false') capasTrafico[capa].addTo(mapaTrafico);
       }
+      aplicarCapasTrafico();
       return mapaTrafico;
+    }
+
+    // Las capas de TomTom solo se piden si el servidor tiene la clave: sin ella, cada imagen del mapa
+    // respondería 503 (decenas de peticiones inútiles y errores en la consola al mover el mapa)
+    let traficoConfigurado = null; // null mientras no se sabe
+    function aplicarCapasTrafico() {
+      for (const boton of $$('.seg button[data-capa]')) {
+        boton.disabled = traficoConfigurado === false;
+        const capa = capasTrafico[boton.dataset.capa];
+        if (!capa || !mapaTrafico) continue;
+        const visible = traficoConfigurado === true && boton.getAttribute('aria-pressed') !== 'false';
+        if (visible) capa.addTo(mapaTrafico);
+        else capa.remove();
+      }
     }
 
     async function cargarTrafico() {
       const viajes = await api('/trafico/viajes');
       const estado = await api('/trafico/estado'); // después de la lista, para contar sus consultas
 
+      traficoConfigurado = Boolean(estado.configurado);
+      aplicarCapasTrafico();
       const aviso = $('#tr-aviso');
       aviso.hidden = estado.configurado;
       aviso.textContent = 'Falta la clave de TomTom (TOMTOM_API_KEY en Backend/.env): solo se muestra la ruta planeada, sin tráfico.';
@@ -1007,8 +1023,7 @@
         boton.addEventListener('click', () => {
           const activa = boton.getAttribute('aria-pressed') !== 'true';
           boton.setAttribute('aria-pressed', String(activa));
-          const capa = capasTrafico[boton.dataset.capa];
-          if (capa && mapaTrafico) activa ? capa.addTo(mapaTrafico) : capa.remove();
+          aplicarCapasTrafico();
         });
       });
     }

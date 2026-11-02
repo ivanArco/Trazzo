@@ -2334,3 +2334,6 @@ body:has(.screen:target) .login {
   #dlg-push .dialog__acciones { flex-wrap: wrap; }
   #dlg-push .dialog__acciones .btn { flex: 1 1 auto; }
 }
+
+/* Capas de TomTom no disponibles (servidor sin clave) */
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
