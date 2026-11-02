@@ -121,7 +121,9 @@ export async function vistaPublica(token) {
     duracion_min: viaje.duracion_min,
     operador: nombreDeOperador(viaje.operador),
     ruta,
-    eventos: eventos.map((e) => ({ tipo: e.tipo, texto: EVENTO_PUBLICO[e.tipo] || 'Actualización', fecha: e.creado_en })),
+    // Las alertas del botón de pánico son internas: el cliente nunca las ve
+    eventos: eventos.filter((e) => e.tipo !== 'panico')
+      .map((e) => ({ tipo: e.tipo, texto: EVENTO_PUBLICO[e.tipo] || 'Actualización', fecha: e.creado_en })),
     asistente: iaDisponible(), // la página muestra «Pregunta sobre tu envío» solo si hay IA configurada
     push: pushDisponible() ? clavePublica() : null // clave para el botón «Avísame» (notificaciones)
   };

@@ -1,0 +1,29 @@
+<!-- ===================== BOTÓN DE PÁNICO: AVISO PARA ADMINISTRADORES ===================== -->
+  <!-- El operador lo activa desde la app móvil; aquí aparece hasta que un administrador lo cierra -->
+  <section class="panico" id="panico-aviso" role="alert" aria-live="assertive" hidden>
+    <svg class="i panico__icono" aria-hidden="true"><use href="#i-alert" /></svg>
+    <div class="panico__texto">
+      <b id="panico-titulo">Botón de pánico activado</b>
+      <span id="panico-detalle"></span>
+    </div>
+    <div class="panico__acciones">
+      <button type="button" class="btn btn--sm" id="panico-ver">Ver alerta</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="panico-silenciar">Silenciar</button>
+    </div>
+  </section>
+
+  <dialog class="dialog dialog--ancho" id="dlg-panico" aria-labelledby="t-dlg-panico">
+    <h2 id="t-dlg-panico" class="c-red">Alerta de pánico</h2>
+    <div class="panico-lista" id="panico-lista" hidden></div>
+    <div class="panico-mapa" id="panico-mapa" role="region" aria-label="Recorrido de la unidad desde que se activó la alerta"></div>
+    <dl class="panico-datos" id="panico-datos"></dl>
+    <label class="f"><span>Nota de seguimiento (opcional)</span>
+      <textarea id="panico-nota" rows="2" maxlength="255" placeholder="Ej. Se llamó al 911; la unidad fue localizada"></textarea>
+    </label>
+    <p class="err" id="err-panico" role="alert" hidden></p>
+    <div class="dialog__acciones">
+      <button type="button" class="btn btn--ghost" id="panico-cerrar">Cerrar</button>
+      <button type="button" class="btn btn--ghost" id="panico-falsa">Falsa alarma</button>
+      <button type="button" class="btn btn--accent" id="panico-atender">Marcar como atendida</button>
+    </div>
+  </dialog>

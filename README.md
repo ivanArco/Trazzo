@@ -40,7 +40,78 @@ Para usarla: crea una cuenta gratis en [developer.tomtom.com](https://developer.
 **API Key** del Dashboard y ponla en `Backend/.env` como `TOMTOM_API_KEY=tu_clave`. Nunca la pongas en
 `.env.example` ni en el código.
 
+### Botón de pánico (backend y aviso en la web)
+
+El operador lo activa desde la **app móvil** (en desarrollo) si le roban la unidad o tiene una emergencia; los
+administradores lo ven en la web al instante.
+
+- **Alerta:** queda ligada al viaje activo y a la unidad del operador, con su ubicación GPS (si el teléfono la
+  tiene) y una nota opcional. Solo hay **una alerta activa por operador**: si la app reintenta o vuelve la señal,
+  se devuelve la misma y se guarda la ubicación nueva (aunque lleguen dos al mismo tiempo).
+- **Recorrido:** mientras la alerta siga activa la app manda la ubicación cada ~30 s (`ubicaciones_panico`).
+- **El operador no puede cancelarla** (si lo obligan, la alerta debe seguir activa); solo un administrador la
+  cierra como **atendida** o **falsa alarma**, con una nota. Todo queda en el historial del viaje (evento `panico`).
+- **El cliente nunca la ve:** la página pública de rastreo oculta esos eventos.
+- **Web (solo administradores):** aviso rojo fijo con pitido (abajo a la izquierda; en celular, arriba del botón
+  del ChatBot), contador en el título de la pestaña, y una ventana con el mapa del recorrido, los datos del
+  operador, viaje y unidad, enlace a Google Maps y los botones «Marcar como atendida» y «Falsa alarma». Se revisa
+  cada 10 s, también con la pestaña en segundo plano. «Silenciar» detiene el pitido en esa pestaña.
+
+| Archivo | Cambio |
+|---|---|
+| `Backend/database/schema.sql` | Tablas `alertas_panico` y `ubicaciones_panico`; tipo de evento `panico` |
+| `Backend/database/migrar.js` | Agrega el tipo `panico` en bases que ya existían (`pnpm migrar` crea las tablas) |
+| `Backend/src/models/panicoModel.js` | **Nuevo.** Consultas SQL |
+| `Backend/src/services/panicoService.js` | **Nuevo.** Validación, una alerta activa por operador, cierre por administrador |
+| `Backend/src/routes/panicoRouter.js` | **Nuevo.** Rutas `/api/panico` (operador: 30 solicitudes/min) |
+| `Backend/src/services/rastreoService.js` | Oculta los eventos `panico` en el rastreo público |
+| `partials/panico.html`, `js/trazzo-core.js`, `css/styles.css` (sección 19), `index.html`, `js/app.js` | Aviso y ventana para administradores |
+
+### Base de datos en la nube (Aiven)
+
+`Backend/src/config/db.js` ahora admite **SSL**, que Aiven exige (`ssl-mode=REQUIRED`). Para usar la base de la
+nube, en `Backend/.env` (nunca en el repositorio):
+
+```
+DB_HOST=<host de Aiven>
+DB_PORT=<puerto de Aiven>
+DB_USER=avnadmin
+DB_PASSWORD=<contraseña de Aiven>
+DB_NAME=defaultdb
+DB_SSL=true
+DB_CA_PATH=C:/ruta/a/ca.pem     # el "CA certificate" que se descarga en Aiven
+```
+
+En Render no hay archivos: pega el contenido del certificado en la variable `DB_CA` (los saltos de línea
+pueden ir como `\n`). Después corre `pnpm migrar` una vez para crear o actualizar las tablas. Con `DB_SSL=false`
+(o sin la variable) la base local funciona igual que antes.
+
+> La app móvil **nunca** se conecta a MySQL: habla con esta API. La contraseña de la base solo vive en el `.env`
+> del backend.
+
+### Notificaciones push
+
+Avisos del sistema operativo que llegan aunque Trazzo esté cerrada (estándar Web Push con claves VAPID).
+
+- **Activar:** botón de avisos del encabezado. El navegador pide permiso, se suscribe con la clave pública
+  VAPID y la suscripción se guarda en `suscripciones_push`. Al tocarlo otra vez o al cerrar sesión, el
+  dispositivo se da de baja.
+- **Avisos de viaje:** al asignar, iniciar, cambiar de estado, estar cerca del destino o entregar, a quien creó
+  y asignó el viaje, al chofer y al cliente que activó «Avísame» en la página de rastreo.
+- **Alerta de pánico:** cuando un operador activa el botón de pánico, todos los administradores con
+  notificaciones activas reciben «🚨 Botón de pánico: <operador>», que no se oculta sola. Al tocarla se abre Trazzo.
+- **Backend:** `notificacionService.js` (librería `web-push`) firma y cifra cada mensaje y lo envía al servicio push del
+  navegador; si una suscripción ya no existe (404/410) se borra. Rutas `/api/push`.
+- **Service Worker:** eventos `push` (muestra la notificación) y `notificationclick` (abre o enfoca la app).
+- **Configuración:** genera las claves con `npx web-push generate-vapid-keys` y ponlas en `Backend/.env`
+  (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`). Requiere HTTPS (o localhost). En iPhone solo
+  funcionan con la app instalada en la pantalla de inicio (iOS 16.4 o posterior).
+
 ### Arreglos
+
+- **El Service Worker no se registraba** (venía de la separación en `partials/`): se registraba en el evento
+  `load`, que ya había ocurrido cuando se carga `js/trazzo-core.js`. Sin él no había funcionamiento sin conexión,
+  aviso de versión nueva ni instalación. Ahora se registra de inmediato si la página ya cargó.
 
 - **Recargar en una sección mostraba la pantalla de acceso** (venía de la separación en `partials/`): al
   recargar, el navegador buscaba el `#ancla` antes de que existieran los parciales. `js/app.js` vuelve a la
@@ -50,7 +121,7 @@ Para usarla: crea una cuenta gratis en [developer.tomtom.com](https://developer.
 - **El panel del ChatBot tapaba el encabezado:** ahora abre debajo del encabezado y arriba del botón en todos
   los tamaños (sección 18 de `css/styles.css`, solo posición; su funcionamiento no cambió).
 - El filtro de «Monitoreo» tomaba todos los botones `.seg` de la página; ahora solo los que tienen `data-filtro`.
-- `sw.js` pasa a `trazzo-v2.9` para que los navegadores descarguen los archivos nuevos.
+- `sw.js` pasa a `trazzo-v2.11` para que los navegadores descarguen los archivos nuevos.
 
 ### Entorno local y cuentas de prueba
 
@@ -59,7 +130,7 @@ base se creó con `pnpm migrar -- --admin ... --demo`. Para levantar todo:
 
 1. MySQL: `"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysqld.exe" --defaults-file=<ruta>\my.ini --console`
    (o regístralo como servicio de Windows para que arranque solo).
-2. Backend + frontend: `cd Backend` y `pnpm dev` (o `node --watch src/server.js`), luego abre `http://localhost:3000`.
+2. Backend + frontend: `cd Backend` y `pnpm dev` (o `node --watch-path=src src/server.js`), luego abre `http://localhost:3000`.
 
 | Cuenta | Correo | Contraseña | Nota |
 |---|---|---|---|
@@ -281,6 +352,15 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | GET | `/api/trafico/viajes` | Administrador | Viajes asignados y en ruta con nivel de tráfico, retraso, incidentes y ahorro posible |
 | GET | `/api/trafico/viajes/:id` | Administrador | Detalle: rutas con tráfico (principal y alternativas), incidentes y recomendación |
 | GET | `/api/trafico/tiles/:capa/:z/:x/:y` | Público (máx. 600/min por IP) | Imágenes de la capa `flujo` o `incidentes` de TomTom (la clave no sale del servidor) |
+| POST | `/api/panico` | Operador | Activa el botón de pánico `{ lat?, lon?, precision_m?, nota? }` → `201 { alerta, nueva: true }`; si ya tenía una activa → `200 { alerta, nueva: false }` |
+| POST | `/api/panico/:id/ubicacion` | Operador dueño de la alerta | `{ lat, lon, precision_m? }` → `{ alerta }`; `409` si un administrador ya la cerró |
+| GET | `/api/panico/mia` | Operador | `{ alerta }` activa o `{ alerta: null }` (para que la app recupere el estado al abrirse) |
+| GET | `/api/panico` | Administrador | Alertas (`?estado=activa`, `atendida`, `falsa_alarma`) |
+| GET | `/api/panico/:id` | Administrador | Alerta con su recorrido (`ubicaciones`) |
+| PATCH | `/api/panico/:id` | Administrador | `{ estado: 'atendida' \| 'falsa_alarma', resolucion? }`; `409` si ya estaba cerrada |
+| GET | `/api/push/clave` | Pública | `{ disponible, clave }` (clave VAPID pública para suscribirse) |
+| POST | `/api/push/suscripcion` | Con sesión | Guarda la suscripción del navegador `{ suscripcion: { endpoint, keys: { p256dh, auth } } }` |
+| DELETE | `/api/push/suscripcion` | Con sesión | `{ endpoint }` → da de baja ese dispositivo |
 
 Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token en `Authorization: Bearer <token>`. Su dirección se configura en la constante `API_URL` de `index.html`.
 

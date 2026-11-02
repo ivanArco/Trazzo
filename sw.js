@@ -1,6 +1,6 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v3.15';
+const CACHE = 'trazzo-v3.16';
 // Caché de las consultas a la API: la llena la página (js/trazzo-core.js) y se conserva entre versiones
 const CACHE_API = 'trazzo-api';
 
@@ -19,6 +19,7 @@ const ARCHIVOS = [
   './partials/dialogs.html',
   './partials/chatbot.html',
   './partials/toast.html',
+  './partials/panico.html',
   './img/patio-carga.svg',
   './img/seguimiento-poster.jpg',
   './icons/icon-192.png',
@@ -76,7 +77,7 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
-// Notificaciones push: el backend manda { title, body, url, tag } cuando un viaje cambia
+// Notificaciones push: el backend manda { title, body, url, tag, urgente } cuando un viaje cambia o hay una alerta
 self.addEventListener('push', (e) => {
   let aviso = {};
   try { aviso = e.data?.json() ?? {}; } catch { aviso = { body: e.data?.text() }; }
@@ -87,6 +88,8 @@ self.addEventListener('push', (e) => {
     lang: 'es-MX',
     tag: aviso.tag,               // un aviso por viaje: el nuevo reemplaza al anterior
     renotify: Boolean(aviso.tag), // pero vuelve a sonar/vibrar
+    requireInteraction: Boolean(aviso.urgente), // las alertas de pánico no se ocultan solas
+    vibrate: aviso.urgente ? [300, 120, 300, 120, 600] : [150],
     data: { url: aviso.url || './' }
   }));
 });

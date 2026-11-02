@@ -183,17 +183,33 @@ async function enviar(viajeId, tipo, { actorId, reanuda, nota, anteriorOperadorI
       url = './#monitoreo';
     }
 
-    const payload = JSON.stringify({ ...aviso, url, tag: viaje.folio });
-    try {
-      await webpush.sendNotification(
-        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        payload,
-        { TTL: 6 * 3600, urgency: ['cerca', 'retraso'].includes(tipo) ? 'high' : 'normal' }
-      );
-    } catch (error) {
-      // 404/410: el navegador canceló la suscripción; se borra para no volver a intentarlo
-      if ([404, 410].includes(error.statusCode)) await pool.query('DELETE FROM suscripciones_push WHERE id = ?', [s.id]);
-      else console.error('Notificaciones: no se pudo enviar un aviso', error.statusCode || error.message);
-    }
+    await entregar(s, { ...aviso, url, tag: viaje.folio }, { TTL: 6 * 3600, urgency: ['cerca', 'retraso'].includes(tipo) ? 'high' : 'normal' });
   }));
+}
+
+async function entregar(s, aviso, opciones) {
+  try {
+    await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(aviso), opciones);
+  } catch (error) {
+    // 404/410: el navegador canceló la suscripción; se borra para no volver a intentarlo
+    if ([404, 410].includes(error.statusCode)) await pool.query('DELETE FROM suscripciones_push WHERE id = ?', [s.id]);
+    else console.error('Notificaciones: no se pudo enviar un aviso', error.statusCode || error.message);
+  }
+}
+
+// Alerta urgente para todo el personal con esos roles (botón de pánico), aunque no esté ligado al viaje
+export function avisarRoles(roles, aviso) {
+  if (!pushDisponible()) return;
+  enviarARoles(roles, aviso).catch((error) => console.error('Notificaciones:', error.message));
+}
+
+async function enviarARoles(roles, aviso) {
+  await asegurarTabla();
+  const [suscripciones] = await pool.query(
+    `SELECT s.id, s.endpoint, s.p256dh, s.auth FROM suscripciones_push s
+       JOIN usuarios u ON u.id = s.usuario_id
+      WHERE s.viaje_id = 0 AND u.rol IN (?)`,
+    [roles]
+  );
+  await Promise.all(suscripciones.map((s) => entregar(s, aviso, { TTL: 24 * 3600, urgency: 'high' })));
 }

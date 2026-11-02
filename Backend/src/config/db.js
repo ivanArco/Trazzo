@@ -7,9 +7,9 @@ import mysql from 'mysql2/promise';
 // En la computadora local no se pone DB_SSL y la conexión queda como antes.
 function opcionesSsl() {
   if (!['true', 'required'].includes(process.env.DB_SSL)) return undefined;
-  // El certificado puede venir como contenido (DB_CA_CERT, admite \n en una sola línea) o como archivo (DB_SSL_CA)
-  const ca = process.env.DB_CA_CERT?.trim().replace(/\\n/g, '\n')
-    || (process.env.DB_SSL_CA ? readFileSync(process.env.DB_SSL_CA) : undefined);
+  // El certificado puede venir como contenido (DB_CA_CERT o DB_CA, admite \n en una sola línea) o como archivo (DB_SSL_CA o DB_CA_PATH)
+  const ca = (process.env.DB_CA_CERT || process.env.DB_CA)?.trim().replace(/\\n/g, '\n')
+    || (process.env.DB_SSL_CA || process.env.DB_CA_PATH ? readFileSync(process.env.DB_SSL_CA || process.env.DB_CA_PATH) : undefined);
   // Con certificado se verifica el servidor; sin él, la conexión se cifra pero no se verifica
   const verificar = process.env.DB_SSL_VERIFY ? process.env.DB_SSL_VERIFY !== 'false' : Boolean(ca);
   return { rejectUnauthorized: verificar, ...(ca ? { ca } : {}) };
