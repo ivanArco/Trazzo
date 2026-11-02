@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS viajes (
   creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   entregado_en DATETIME NULL,
   rastreo_token VARCHAR(43) NULL,            -- enlace público de rastreo para el cliente (QR)
+  gps_latitud DECIMAL(10, 7) NULL,           -- última ubicación compartida voluntariamente por el operador
+  gps_longitud DECIMAL(10, 7) NULL,
+  gps_precision_m DECIMAL(8, 2) NULL,
+  gps_actualizado_en DATETIME NULL,
   PRIMARY KEY (id),
   UNIQUE KEY folio (folio),
   UNIQUE KEY rastreo_token (rastreo_token),
