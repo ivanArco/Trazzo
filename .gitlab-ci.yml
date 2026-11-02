@@ -21,6 +21,15 @@ verificar_sitio:
   script:
     - node ci/verificar.mjs
 
+probar_backend:
+  stage: verificar
+  image: node:22-alpine
+  variables:
+    BACKEND: "server.js"   # nombre del archivo de tu backend
+    PUERTO: "3000"
+  script:
+    - node ci/probar_backend.mjs
+
 # ---------- PUBLICACIÓN (GitLab Pages) ----------
 pages:
   stage: deploy
