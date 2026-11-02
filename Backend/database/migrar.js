@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import bcrypt from 'bcrypt';
 import pool from '../src/config/db.js';
+import * as documentoModel from '../src/models/documentoModel.js';
 
 const ROLES_NUEVOS = "'admin','capturista','operador','cliente'";
 const EQUIVALENCIAS = { profesor: 'admin', estudiante: 'operador' }; // roles anteriores
@@ -45,6 +46,38 @@ async function agregarColumnas() {
     if (existentes.some((c) => c.Field === columna)) continue;
     await pool.query(`ALTER TABLE viajes ADD COLUMN ${columna} ${tipo}`);
     console.log(`✔ Columna agregada: viajes.${columna}`);
+  }
+}
+
+// 1c. Estado de OCR: compatible con bases de datos que ya tenían documentos
+async function agregarEstadoOcr() {
+  if (await documentoModel.asegurarEstadoOcr()) console.log('✔ Columna agregada: documentos.ocr_estado');
+  const columnasDocumento = {
+    ocr_error: 'VARCHAR(255) NULL',
+    calidad_ocr: 'TINYINT UNSIGNED NULL',
+    archivado_en: 'DATETIME NULL',
+    archivado_por: 'INT NULL',
+    motivo_archivo: 'VARCHAR(255) NULL'
+  };
+  const [documentos] = await pool.query('SHOW COLUMNS FROM documentos');
+  for (const [nombre, tipo] of Object.entries(columnasDocumento)) {
+    if (documentos.some((columna) => columna.Field === nombre)) continue;
+    await pool.query(`ALTER TABLE documentos ADD COLUMN ${nombre} ${tipo}`);
+    console.log(`✔ Columna agregada: documentos.${nombre}`);
+  }
+  await pool.query("UPDATE documentos SET texto_ocr = NULL, datos_json = NULL WHERE tipo = 'identificacion'");
+  await pool.query("UPDATE documentos SET coincide_viaje = NULL WHERE tipo NOT IN ('comprobante_entrega', 'guia_remision', 'factura')");
+  const [[columna]] = await pool.query("SHOW COLUMNS FROM documentos_bitacora LIKE 'accion'");
+  if (!columna.Type.includes("'corregido'") || !columna.Type.includes("'archivado'") || !columna.Type.includes("'restaurado'")) {
+    await pool.query(
+      "ALTER TABLE documentos_bitacora MODIFY accion ENUM('subido', 'visto', 'corregido', 'aprobado', 'rechazado', 'reprocesado', 'alterado', 'archivado', 'restaurado') NOT NULL"
+    );
+    console.log('✔ Acción agregada: documentos_bitacora.corregido');
+  }
+  const [[nota]] = await pool.query("SHOW COLUMNS FROM documentos_bitacora LIKE 'nota'");
+  if (!nota.Type.toLowerCase().includes('mediumtext')) {
+    await pool.query('ALTER TABLE documentos_bitacora MODIFY nota MEDIUMTEXT NULL');
+    console.log('✔ Campo ampliado: documentos_bitacora.nota');
   }
 }
 
@@ -155,6 +188,7 @@ async function cargarDemo() {
 try {
   await crearTablas();
   await agregarColumnas();
+  await agregarEstadoOcr();
   await migrarRoles();
   await cifrarContraseñas();
   await cargarUnidades();

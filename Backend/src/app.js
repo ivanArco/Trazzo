@@ -13,6 +13,7 @@ import asistenteRoutes from './routes/asistenteRouter.js';
 import chatbotRoutes from './routes/chatbotRouter.js';
 import traficoRoutes from './routes/traficoRouter.js';
 import pushRoutes from './routes/pushRouter.js';
+import documentoRoutes from './routes/documentoRouter.js';
 
 // Obtener la ruta equivalente a __dirname para ES Modules
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +23,10 @@ const app = express();
 
 // 1. Archivos estáticos
 // Subir dos niveles desde Backend/src hasta la raíz del proyecto para servir HTML, CSS, JS e imágenes
+app.use((req, res, next) => {
+  if (/^\/backend(?:\/|$)/i.test(req.path)) return res.sendStatus(404);
+  next();
+});
 app.use(express.static(path.join(__dirname, '../../')));
 
 // Rastreo público para clientes
@@ -43,6 +48,8 @@ app.use('/api/asistente', asistenteRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/trafico', traficoRoutes);
 app.use('/api/push', pushRoutes);
+// API de carga, consulta y revisión de comprobantes de viaje.
+app.use('/api/documentos', documentoRoutes);
 
 // 2. Servir el index.html en la raíz (/)
 app.get('/', (req, res) => {

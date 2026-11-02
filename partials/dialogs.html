@@ -20,6 +20,70 @@
     </form>
   </dialog>
 
+  <!-- Revisión accesible y responsiva de evidencia y lectura OCR del documento. -->
+  <dialog class="dialog dialog--ancho doc-dialog" id="dlg-documento" aria-labelledby="doc-titulo">
+    <header class="doc-dialog__head">
+      <div><h2 id="doc-titulo">Documento</h2><span class="muted" id="doc-subtitulo"></span></div>
+      <p class="doc-bloqueo" id="doc-bloqueo" role="status" hidden></p>
+    </header>
+    <div class="doc-review">
+      <aside class="doc-review__foto">
+        <img id="doc-imagen" class="doc-imagen" alt="Imagen del comprobante">
+        <p id="doc-foto-no-disponible" class="doc-placeholder" role="status" hidden>Archivo no disponible</p>
+      </aside>
+      <section class="doc-review__contenido">
+        <p class="doc-ocr-estado" id="doc-ocr-estado" role="status"></p>
+        <nav class="doc-review__tabs" role="tablist" aria-label="Información del documento">
+          <button type="button" role="tab" data-doc-panel="datos" aria-selected="true">Datos</button>
+          <button type="button" role="tab" data-doc-panel="ocr" aria-selected="false">Texto OCR</button>
+          <button type="button" role="tab" data-doc-panel="bitacora" aria-selected="false" id="doc-tab-bitacora">Bitácora</button>
+        </nav>
+        <section id="doc-panel-datos" data-doc-panel-content="datos">
+          <dl class="kv" id="doc-datos"></dl>
+          <form class="form" id="form-corregir-documento">
+            <h3>Corregir datos extraídos</h3>
+            <div class="cols">
+              <label class="f"><span>Tipo</span><select name="tipo" id="doc-corr-tipo"></select></label>
+              <label class="f"><span>Número de guía</span><input name="numero_guia" id="doc-corr-guia" maxlength="40"></label>
+              <label class="f"><span>Fecha (DD/MM/AAAA)</span><input name="fecha" id="doc-corr-fecha" inputmode="numeric" placeholder="29/03/1999" maxlength="10"></label>
+              <label class="f"><span>Receptor</span><input name="receptor" id="doc-corr-receptor" maxlength="120"></label>
+              <label class="f"><span>Monto</span><input name="monto" id="doc-corr-monto" type="number" min="0" max="1000000000" step="0.01"></label>
+            </div>
+            <label class="f"><span>Texto OCR (editable)</span><textarea name="texto_ocr" id="doc-corr-texto" maxlength="20000" rows="5"></textarea></label>
+            <button type="submit" class="btn btn--ghost" id="doc-guardar-correccion" aria-describedby="doc-bloqueo">Guardar corrección</button>
+            <small id="doc-guardar-motivo" class="muted" role="status">Se habilita al cambiar algún dato.</small>
+          </form>
+          <dl class="doc-solo-lectura" id="doc-datos-lectura" hidden></dl>
+        </section>
+        <section id="doc-panel-ocr" data-doc-panel-content="ocr" hidden>
+          <details class="doc-ocr-details">
+            <summary>Mostrar lectura OCR</summary>
+            <pre class="doc-ocr" id="doc-ocr"></pre>
+          </details>
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-copiar-ocr">Copiar texto</button>
+          <p class="doc-aviso-calidad" id="doc-aviso-calidad" role="status" hidden>La lectura es de baja calidad. Revisa la foto y corrige el texto antes de decidir.</p>
+        </section>
+        <section id="doc-panel-bitacora" data-doc-panel-content="bitacora" data-rol="admin" hidden>
+          <header class="panel__head"><h3 class="dv-titulo">Bitácora</h3><button type="button" class="btn btn--ghost btn--sm" id="doc-cargar-bitacora">Actualizar</button></header>
+          <ul class="feed" id="doc-bitacora"><li><small>Consultando bitácora…</small></li></ul>
+        </section>
+      </section>
+    </div>
+    <footer class="doc-dialog__actions">
+      <div class="doc-dialog__nota">
+        <label class="f"><span>Nota (obligatoria para rechazar y justificar discrepancias)</span><textarea id="doc-nota" maxlength="255" rows="2" aria-describedby="doc-bloqueo"></textarea></label>
+      </div>
+      <div class="doc-dialog__botones">
+        <button type="button" class="btn btn--ghost btn--sm" id="doc-anterior-pendiente">Anterior</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="doc-reprocesar" aria-describedby="doc-bloqueo">Reprocesar OCR</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="doc-rechazar" aria-describedby="doc-bloqueo">Rechazar</button>
+        <button type="button" class="btn btn--accent btn--sm" id="doc-aprobar" aria-describedby="doc-bloqueo">Aprobar</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="doc-siguiente-pendiente">Siguiente pendiente</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="doc-cerrar">Cerrar</button>
+      </div>
+    </footer>
+  </dialog>
+
   <!-- Aviso flotante -->
   <!-- ===================== AGREGAR / EDITAR UNIDAD ===================== -->
   <dialog class="dialog" id="dlg-unidad" aria-labelledby="t-dlg-unidad">
@@ -56,6 +120,33 @@
       <div class="actions" id="dv-botones"></div>
     </div>
     <div class="dv-rastreo" id="dv-rastreo" hidden></div>
+    <!-- Escáner y lista de comprobantes asociados al detalle de un viaje. -->
+    <section class="dv-documentos" id="dv-documentos" aria-labelledby="dv-doc-titulo">
+      <header class="panel__head">
+        <h3 class="dv-titulo" id="dv-doc-titulo">Comprobantes</h3>
+        <button type="button" class="btn btn--accent btn--sm" id="dv-escanear">Escanear comprobante</button>
+      </header>
+      <div class="doc-escaner" id="doc-escaner" hidden>
+        <p id="doc-camara-apagada" class="doc-placeholder" role="status">Cámara apagada. No se está capturando ninguna imagen.</p>
+        <video id="doc-video" playsinline muted aria-label="Vista previa de la cámara" hidden></video>
+        <img id="doc-preview" class="doc-escaner__preview" alt="Vista previa de la foto seleccionada" hidden>
+        <p id="doc-escaner-estado" role="status">Cámara apagada. Abre la cámara o elige una foto para comenzar.</p>
+        <div class="doc-indicadores" aria-live="polite">
+          <span id="doc-indicador-luz">Iluminación: sin medición</span>
+          <span id="doc-indicador-enfoque">Enfoque: sin medición</span>
+        </div>
+        <p id="doc-captura-motivo" class="muted">Capturar requiere cámara activa, imagen enfocada e iluminación suficiente.</p>
+        <p id="doc-calidad" role="status"></p>
+        <p class="doc-privacidad" id="doc-privacidad-escaner" role="note">Consultando el motor OCR…</p>
+        <div class="doc-escaner__botones">
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-abrir-camara">Abrir cámara</button>
+          <button type="button" class="btn btn--accent btn--sm" id="doc-capturar" disabled aria-describedby="doc-captura-motivo">Capturar</button>
+          <label class="btn btn--ghost btn--sm doc-elegir">Elegir foto de galería<input id="doc-archivo-viaje" type="file" accept="image/*"></label>
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-cerrar-camara">Cerrar cámara</button>
+        </div>
+      </div>
+      <ul class="feed" id="dv-lista-documentos"></ul>
+    </section>
     <h3 class="dv-titulo">Historial</h3>
     <ul class="feed" id="dv-eventos"></ul>
     <div class="actions"><button type="button" class="btn btn--ghost" id="dv-cerrar">Cerrar</button></div>

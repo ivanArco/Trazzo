@@ -260,7 +260,7 @@
     const API_PUBLICA = 'https://trazzo-vosj.onrender.com/api';
     const RED_LOCAL = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
     const SERVIDOR_DE_ARCHIVOS = ['5500', '5501', '8000', '8080'].includes(location.port);
-    const API_URL = RED_LOCAL.test(location.hostname)
+    const API_URL =  RED_LOCAL.test(location.hostname)
       ? (SERVIDOR_DE_ARCHIVOS ? `${location.protocol}//${location.hostname}:3000/api` : `${location.origin}/api`)
       : location.hostname.endsWith('.onrender.com') ? `${location.origin}/api` : API_PUBLICA;
 
@@ -311,10 +311,12 @@
     // fetch con el token y manejo de errores; lanza Error con el mensaje del servidor
     async function api(ruta, { method = 'GET', body } = {}) {
       const token = sesion.leer()?.token;
+      const esDocumento = ruta.startsWith('/documentos');
       let respuesta;
       try {
         respuesta = await fetch(API_URL + ruta, {
           method,
+          cache: esDocumento ? 'no-store' : 'default',
           headers: {
             'Content-Type': 'application/json',
             ...(token && { Authorization: `Bearer ${token}` })
@@ -323,7 +325,7 @@
         });
       } catch {
         // Sin red: las consultas usan la última copia guardada; los cambios no se pueden enviar
-        const guardado = method === 'GET' && await cacheApi.leer(ruta);
+        const guardado = method === 'GET' && !esDocumento && await cacheApi.leer(ruta);
         if (guardado) return guardado;
         throw new Error(navigator.onLine
           ? 'No hay conexión con el servidor. ¿Está encendido el backend?'
@@ -336,7 +338,7 @@
         mostrarAviso(datos.message || 'Tu sesión expiró.');
       }
       if (!respuesta.ok) throw Object.assign(new Error(datos.message || `Error ${respuesta.status}`), { status: respuesta.status });
-      if (method === 'GET') await cacheApi.guardar(ruta, datos);
+      if (method === 'GET' && !esDocumento) await cacheApi.guardar(ruta, datos);
       return datos;
     }
 
@@ -358,6 +360,11 @@
 
       // Oculta enlaces y botones que no corresponden al rol
       $$('[data-rol]').forEach((n) => { n.hidden = !permitidoPara(n, usuario?.rol); });
+      if (usuario?.rol === 'admin') {
+        cargarConteoDocumentos().catch((error) => mostrarAviso(error.message));
+      } else {
+        $('#nav-documentos-pendientes').hidden = true;
+      }
       actualizarBotonAvisos(usuario);
     }
 
@@ -440,7 +447,8 @@
       personal: cargarUsuarios,
       historial: cargarHistorial,
       flota: cargarFlota,
-      trafico: cargarTrafico
+      trafico: cargarTrafico,
+      documentos: cargarDocumentos
     };
 
     async function cargarSeccion({ silencioso = false } = {}) {
@@ -605,6 +613,7 @@
     }
 
     function pintarDetalle(v) {
+      viajeEscaner = v;
       const e = ESTADOS[v.estado];
       $('#dv-tarjeta').className = `tcard tcard--${e.clase}`;
       $('#dv-folio').textContent = v.folio;
@@ -632,6 +641,7 @@
       $('#dv-datos').replaceChildren(...filas);
 
       pintarAcciones(v);
+      cargarDocumentosViaje(v).catch((error) => mostrarAviso(error.message));
       $('#dv-eventos').replaceChildren(...v.eventos.map((ev) => el('li', { class: claseEvento(ev.tipo) },
         el('b', { text: ev.descripcion }),
         el('small', { text: `${hora(ev.creado_en)} · ${ev.usuario || 'Sistema'}` }))));
@@ -761,6 +771,9 @@
       $('#dv-cerrar').addEventListener('click', () => dialogo.close());
       dialogo.addEventListener('close', () => {
         viajeAbierto = null;
+        viajeEscaner = null;
+        clearTimeout(temporizadorListaViaje);
+        cerrarEscanerDocumento({ ocultar: true });
         delete $('#dv-botones').dataset.clave;
       });
     }
@@ -1401,6 +1414,1127 @@
       $('#hi-exportar').addEventListener('click', (e) => exportarHistorial(e.currentTarget));
     }
 
+    /* ---------- Módulo de documentos: carga, OCR, galería, revisión y escáner ---------- */
+    async function cargarDocumentosViaje(viaje) {
+      const usuario = usuarioActual();
+      const section = $('#dv-documentos');
+      const esAdmin = usuario?.rol === 'admin';
+      const esOperadorPropio = usuario?.rol === 'operador' && Number(viaje.operador_id) === Number(usuario.id);
+      section.hidden = !esAdmin && !esOperadorPropio;
+      if (section.hidden) {
+        detenerCamaraDocumento();
+        return;
+      }
+
+      $('#dv-escanear').hidden = viaje.estado === 'cancelado' || (!esAdmin && !esOperadorPropio);
+      if (viaje.estado === 'cancelado') cerrarEscanerDocumento({ ocultar: true });
+      const documentos = await api(`/documentos/viaje/${viaje.id}`);
+      const lista = $('#dv-lista-documentos');
+      const elementos = documentos.map((doc) => {
+        const estado = DOC_ESTADOS[doc.estado] || DOC_ESTADOS.pendiente;
+        const momento = new Date(doc.creado_en);
+        const fechaHora = Number.isNaN(momento.getTime()) ? 'Fecha no disponible' : fmtFechaHora.format(momento);
+        const coincidencia = DOC_TIPOS_COMPARABLES.has(doc.tipo)
+          ? doc.coincide_viaje === null ? 'Coincidencia sin datos' : doc.coincide_viaje ? 'Coincide con el viaje' : 'No coincide con el viaje'
+          : 'No aplica';
+        const partes = [
+          el('b', { text: `${DOC_TIPOS[doc.tipo] || doc.tipo || 'Documento'} · ${estado.texto}` }),
+          el('small', { text: fechaHora }),
+          el('small', { text: `Guía: ${doc.numero_guia || 'No detectada'}` }),
+          el('small', {
+            class: DOC_TIPOS_COMPARABLES.has(doc.tipo) && doc.coincide_viaje === false
+              ? 'doc-match doc-match--alert' : 'doc-match doc-match--muted',
+            text: coincidencia
+          }),
+          doc.estado === 'rechazado' && doc.nota_revision && el('small', { class: 'doc-rechazo', text: `Nota de rechazo: ${doc.nota_revision}` })
+        ];
+        if (esAdmin) {
+          partes.unshift(el('span', { class: 'mono', text: viaje.folio }));
+          if (doc.ocr_estado === 'error') partes.push(el('small', { class: 'doc-ocr-error', text: doc.ocr_error || 'Falló la lectura OCR.' }));
+          partes.push(el('button', {
+            type: 'button',
+            class: 'btn btn--ghost btn--sm',
+            onclick: () => abrirDocumento(doc.id)
+          }, 'Abrir revisión'));
+        }
+        return el('li', { class: 'doc-trip-item' }, ...partes);
+      });
+      lista.replaceChildren(...(elementos.length ? elementos : [
+        el('li', {}, el('small', { text: 'Todavía no hay comprobantes en este viaje.' }))
+      ]));
+      const hayOcrPendiente = esAdmin && documentos.some((doc) => doc.ocr_estado === 'procesando');
+      clearTimeout(temporizadorListaViaje);
+      if (hayOcrPendiente && $('#dlg-viaje').open) {
+        temporizadorListaViaje = setTimeout(() => {
+          if (viajeAbierto === viaje.id && $('#dlg-viaje').open) {
+            cargarDocumentosViaje(viaje).catch((error) => mostrarAviso(error.message));
+          }
+        }, 3000);
+      }
+    }
+
+    function cerrarEscanerDocumento({ ocultar = false } = {}) {
+      if (ocultar) {
+        $('#doc-escaner').hidden = true;
+        if (urlVistaPreviaDocumento) URL.revokeObjectURL(urlVistaPreviaDocumento);
+        urlVistaPreviaDocumento = null;
+        $('#doc-preview').removeAttribute('src');
+        $('#doc-preview').hidden = true;
+      }
+      detenerCamaraDocumento();
+      if ($('#doc-camara-apagada')) $('#doc-camara-apagada').hidden = Boolean(urlVistaPreviaDocumento);
+      if (!ocultar) {
+        $('#doc-escaner-estado').textContent = 'Cámara apagada. Abre la cámara o elige una foto para comenzar.';
+        $('#doc-calidad').textContent = '';
+        $('#doc-captura-motivo').textContent = 'Capturar requiere cámara activa, imagen enfocada e iluminación suficiente.';
+        $('#doc-indicador-luz').textContent = 'Iluminación: sin medición';
+        $('#doc-indicador-enfoque').textContent = 'Enfoque: sin medición';
+      }
+    }
+
+    function detenerCamaraDocumento() {
+      if (rafCalidadDocumento !== null) cancelAnimationFrame(rafCalidadDocumento);
+      rafCalidadDocumento = null;
+      if (camaraDocumento) camaraDocumento.getTracks().forEach((pista) => pista.stop());
+      camaraDocumento = null;
+      const video = $('#doc-video');
+      if (video) {
+        video.srcObject = null;
+        video.hidden = true;
+      }
+      fotogramasBuenos = 0;
+      const captura = $('#doc-capturar');
+      if (captura) {
+        captura.disabled = true;
+        captura.removeAttribute('aria-busy');
+      }
+    }
+
+    function medirCalidadFotograma(canvas) {
+      const contexto = canvas.getContext('2d', { willReadFrequently: true });
+      if (!contexto) return null;
+      const pixels = contexto.getImageData(32, 24, 96, 72).data;
+      const ancho = 96;
+      const alto = 72;
+      const gris = new Uint8Array(ancho * alto);
+      let brillo = 0;
+      for (let i = 0, p = 0; i < pixels.length; i += 4, p++) {
+        gris[p] = Math.round(pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114);
+        brillo += gris[p];
+      }
+      brillo /= gris.length;
+      let suma = 0;
+      let sumaCuadrados = 0;
+      let cuenta = 0;
+      for (let y = 1; y < alto - 1; y++) {
+        for (let x = 1; x < ancho - 1; x++) {
+          const i = y * ancho + x;
+          const laplaciano = 4 * gris[i] - gris[i - 1] - gris[i + 1] - gris[i - ancho] - gris[i + ancho];
+          suma += laplaciano;
+          sumaCuadrados += laplaciano * laplaciano;
+          cuenta++;
+        }
+      }
+      const enfoque = Math.max(0, sumaCuadrados / cuenta - (suma / cuenta) ** 2);
+      return {
+        brillo,
+        enfoque,
+        luzBuena: brillo >= 45 && brillo <= 225,
+        enfoqueBueno: enfoque >= 80
+      };
+    }
+
+    function medirCalidadCamara() {
+      const video = $('#doc-video');
+      if (!camaraDocumento || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        rafCalidadDocumento = requestAnimationFrame(medirCalidadCamara);
+        return;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = 160;
+      canvas.height = 120;
+      const contextoDibujo = canvas.getContext('2d', { willReadFrequently: true });
+      if (!contextoDibujo) {
+        $('#doc-calidad').textContent = 'Este navegador no permite analizar el enfoque. Elige otra foto de galería o usa la cámara.';
+        detenerCamaraDocumento();
+        return;
+      }
+      contextoDibujo.drawImage(video, 0, 0, canvas.width, canvas.height);
+      let calidad;
+      try {
+        calidad = medirCalidadFotograma(canvas);
+      } catch {
+        $('#doc-calidad').textContent = 'No se pudo analizar la iluminación y el enfoque. Elige otra foto de galería o usa la cámara.';
+        detenerCamaraDocumento();
+        return;
+      }
+      if (!calidad) {
+        $('#doc-calidad').textContent = 'Este navegador no permite analizar el enfoque. Elige otra foto de galería o usa la cámara.';
+        detenerCamaraDocumento();
+        return;
+      }
+      const { brillo, enfoque, luzBuena, enfoqueBueno } = calidad;
+      const bueno = luzBuena && enfoqueBueno;
+      fotogramasBuenos = bueno ? fotogramasBuenos + 1 : 0;
+      $('#doc-capturar').disabled = fotogramasBuenos < 3;
+      $('#doc-indicador-luz').textContent = `Iluminación: ${Math.round(brillo)} · ${luzBuena ? 'adecuada' : 'ajustar'}`;
+      $('#doc-indicador-enfoque').textContent = `Enfoque: ${Math.round(enfoque)} · ${enfoqueBueno ? 'adecuado' : 'ajustar'}`;
+      $('#doc-captura-motivo').textContent = fotogramasBuenos >= 3
+        ? 'Captura habilitada: luz y enfoque estables.'
+        : !luzBuena ? 'Capturar deshabilitado: mejora la iluminación.'
+          : !enfoqueBueno ? 'Capturar deshabilitado: enfoca y mantén estable el comprobante.'
+            : 'Capturar deshabilitado: mantén la imagen estable durante 3 mediciones.';
+      $('#doc-captura-motivo').hidden = fotogramasBuenos >= 3;
+      $('#doc-escaner-estado').textContent = 'Cámara activa · vista previa en vivo.';
+      $('#doc-calidad').textContent = `Luz ${Math.round(brillo)} · enfoque ${Math.round(enfoque)} · ${fotogramasBuenos >= 3 ? 'Listo para capturar' : bueno ? 'Mantén estable 3 fotogramas' : 'Ajusta luz y enfoque'}`;
+      rafCalidadDocumento = requestAnimationFrame(medirCalidadCamara);
+    }
+
+    async function abrirCamaraDocumento() {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        $('#doc-escaner-estado').textContent = 'Cámara no disponible. Requiere HTTPS o localhost; puedes elegir una foto.';
+        $('#doc-calidad').textContent = 'Elige una foto de galería o usa la cámara para continuar.';
+        $('#doc-abrir-camara').hidden = true;
+        return;
+      }
+      detenerCamaraDocumento();
+      try {
+        camaraDocumento = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }
+        });
+        const video = $('#doc-video');
+        video.srcObject = camaraDocumento;
+        await video.play();
+        $('#doc-camara-apagada').hidden = true;
+        $('#doc-preview').hidden = true;
+        $('#doc-video').hidden = false;
+        $('#doc-escaner-estado').textContent = 'Cámara activa · vista previa en vivo.';
+        $('#doc-indicador-luz').textContent = 'Iluminación: midiendo…';
+        $('#doc-indicador-enfoque').textContent = 'Enfoque: midiendo…';
+        fotogramasBuenos = 0;
+        rafCalidadDocumento = requestAnimationFrame(medirCalidadCamara);
+      } catch (error) {
+        detenerCamaraDocumento();
+        $('#doc-escaner-estado').textContent = error.name === 'NotAllowedError'
+          ? 'Cámara apagada. Permite el acceso o usa una foto.'
+          : 'No se pudo activar la cámara. Usa una foto o intenta de nuevo.';
+        mostrarAviso(error.name === 'NotAllowedError'
+          ? 'Permite el acceso a la cámara o elige una foto de galería.'
+          : `No se pudo abrir la cámara: ${error.message}`);
+      }
+    }
+
+    const DOC_POR_PAGINA = 12;
+    const DOC_TIPOS = {
+      comprobante_entrega: 'Comprobante de entrega',
+      guia_remision: 'Guía de remisión',
+      factura: 'Factura',
+      identificacion: 'Identificación',
+      otro: 'Otro'
+    };
+    const DOC_TIPOS_COMPARABLES = new Set(['comprobante_entrega', 'guia_remision', 'factura']);
+    const DOC_ESTADOS = {
+      pendiente: { texto: 'Pendiente', clase: 'wait' },
+      aprobado: { texto: 'Aprobado', clase: 'go' },
+      rechazado: { texto: 'Rechazado', clase: 'alert' },
+      archivado: { texto: 'Archivado', clase: 'done' }
+    };
+    const DOC_OCR_ESTADOS = {
+      procesando: { texto: 'Leyendo imagen…', clase: 'wait' },
+      completado: { texto: 'Leído', clase: 'go' },
+      error: { texto: 'Lectura fallida', clase: 'alert' }
+    };
+    let paginaDocumentos = 1;
+    let documentoActual = null;
+    let urlImagenDocumento = null;
+    let temporizadorOcrDocumentos = null;
+    let temporizadorListaViaje = null;
+    let miniaturasDocumentos = [];
+    let generacionGaleria = 0;
+    let vistaDocumentos = 'lista';
+    let archivadosDocumentos = false;
+    let documentosVisibles = [];
+    const seleccionDocumentos = new Set();
+    let archivoDocumentoDisponible = true;
+    let valoresInicialesDocumento = '';
+    let camaraDocumento = null;
+    let rafCalidadDocumento = null;
+    let fotogramasBuenos = 0;
+    let urlVistaPreviaDocumento = null;
+    let viajeEscaner = null;
+
+    function programarActualizacionOcr() {
+      clearTimeout(temporizadorOcrDocumentos);
+      if (location.hash !== '#documentos') return;
+      temporizadorOcrDocumentos = setTimeout(() => {
+        if (location.hash !== '#documentos') return;
+        if (document.hidden) {
+          programarActualizacionOcr();
+          return;
+        }
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      }, 3000);
+    }
+
+    function formatoFechaCampo(fecha) {
+      const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(fecha));
+      return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : '';
+    }
+
+    function fechaDocumentoApi(valor) {
+      if (!valor) return null;
+      const partes = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(valor);
+      if (!partes) throw new Error('La fecha debe tener el formato DD/MM/AAAA.');
+      const [, diaTexto, mesTexto, anioTexto] = partes;
+      const dia = Number(diaTexto);
+      const mes = Number(mesTexto);
+      const anio = Number(anioTexto);
+      const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+      if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== dia) {
+        throw new Error('La fecha no es válida.');
+      }
+      return `${anioTexto}-${mesTexto}-${diaTexto}`;
+    }
+
+    function datosFormularioDocumento() {
+      return Object.fromEntries(new FormData($('#form-corregir-documento')));
+    }
+
+    function actualizarNavegacionDocumento() {
+      const indice = documentosVisibles.findIndex((doc) => Number(doc.id) === Number(documentoActual?.id));
+      const elegible = (doc) => doc.estado === 'pendiente' && !doc.archivado_en
+        && Number(doc.subido_por) !== Number(usuarioActual()?.id);
+      const anterior = indice > 0 && documentosVisibles.slice(0, indice).some(elegible);
+      const siguiente = indice >= 0 && documentosVisibles.slice(indice + 1).some(elegible);
+      $('#doc-anterior-pendiente').disabled = !anterior;
+      $('#doc-siguiente-pendiente').disabled = !siguiente;
+    }
+
+    function actualizarEstadoGuardarCorreccion() {
+      const boton = $('#doc-guardar-correccion');
+      if (!boton || !documentoActual) return;
+      const razonBloqueo = $('#doc-bloqueo').textContent;
+      let razon = razonBloqueo;
+      let fechaValida = true;
+      try { fechaDocumentoApi($('#doc-corr-fecha').value.trim()); } catch { fechaValida = false; }
+      const cambio = JSON.stringify(datosFormularioDocumento()) !== valoresInicialesDocumento;
+      if (!razon && !fechaValida) razon = 'La fecha debe ser válida y usar DD/MM/AAAA.';
+      else if (!razon && !cambio) razon = 'No hay cambios para guardar.';
+      boton.disabled = Boolean(razon) || boton.getAttribute('aria-busy') === 'true';
+      $('#doc-guardar-motivo').textContent = razon || 'Hay cambios listos para guardar.';
+      boton.title = razon;
+      boton.setAttribute('aria-describedby', 'doc-bloqueo doc-guardar-motivo');
+    }
+
+    function actualizarDetalleDocumento(doc) {
+      documentoActual = doc;
+      const estadoOcr = DOC_OCR_ESTADOS[doc.ocr_estado] || DOC_OCR_ESTADOS.error;
+      let datos = doc.datos_json;
+      if (typeof datos === 'string') {
+        try { datos = JSON.parse(datos); } catch { datos = {}; }
+      }
+      const esIdentificacion = doc.tipo === 'identificacion';
+      const campos = [
+        ['Tipo', DOC_TIPOS[doc.tipo] || doc.tipo || 'Sin dato'],
+        ['Estado', DOC_ESTADOS[doc.estado]?.texto || doc.estado || 'Sin dato'],
+        ['Número de guía', doc.numero_guia || 'Sin dato'],
+        ['Coincidencia', DOC_TIPOS_COMPARABLES.has(doc.tipo)
+          ? doc.coincide_viaje === null ? 'Sin dato' : doc.coincide_viaje ? 'Sí' : 'No'
+          : 'No aplica'],
+        ['Fecha', datos?.fecha ? formatoFechaCampo(datos.fecha) : 'Sin dato'],
+        ['Receptor', datos?.receptor || 'Sin dato'],
+        ['Monto', datos?.monto ?? 'Sin dato'],
+        ['Confianza OCR', doc.confianza || 'Sin dato'],
+        ['Revisión', doc.nota_revision || doc.reviso || 'Sin revisión']
+      ];
+      const listaDatos = (raiz) => raiz.replaceChildren(...campos.map(([etiqueta, valor]) =>
+        el('div', {}, el('dt', { text: etiqueta }), el('dd', { text: valor }))));
+      listaDatos($('#doc-datos'));
+      listaDatos($('#doc-datos-lectura'));
+      $('#doc-corr-tipo').value = doc.tipo || 'otro';
+      $('#doc-corr-guia').value = doc.numero_guia || '';
+      $('#doc-corr-fecha').value = datos?.fecha ? formatoFechaCampo(datos.fecha) : '';
+      $('#doc-corr-receptor').value = datos?.receptor || '';
+      $('#doc-corr-monto').value = datos?.monto ?? '';
+      $('#doc-corr-texto').value = esIdentificacion ? '' : doc.texto_ocr || '';
+      $('#doc-corr-texto').closest('.f').hidden = esIdentificacion;
+      $('#doc-ocr').textContent = esIdentificacion
+        ? 'Por privacidad, no se conserva el texto OCR completo de las identificaciones.'
+        : doc.ocr_estado === 'procesando'
+          ? 'El OCR está procesando el documento; esta ventana se actualizará al terminar.'
+          : doc.texto_ocr || 'No se detectó texto. Puedes volver a ejecutar el OCR.';
+      $('#doc-copiar-ocr').hidden = esIdentificacion || !doc.texto_ocr;
+      $('#doc-aviso-calidad').hidden = esIdentificacion || !(doc.confianza === 'baja' || Number(doc.calidad_ocr) < 48);
+      $('#doc-ocr-estado').textContent = doc.ocr_estado === 'error'
+        ? `Lectura OCR fallida: ${doc.ocr_error || 'motivo no disponible'}.`
+        : `Lectura OCR: ${estadoOcr.texto}${doc.calidad_ocr != null ? ` · calidad ${doc.calidad_ocr}/100` : ''}`;
+
+      const propio = Number(doc.subido_por) === Number(usuarioActual()?.id);
+      const archivado = Boolean(doc.archivado_en);
+      const procesando = doc.ocr_estado === 'procesando';
+      const razonBloqueo = !archivoDocumentoDisponible
+        ? 'Archivo no disponible; no se puede revisar, corregir ni reprocesar.'
+        : archivado
+          ? 'Este documento está archivado; restáuralo para permitir cambios.'
+          : propio
+            ? 'Este documento lo subiste tú; otro administrador debe revisarlo.'
+            : doc.estado !== 'pendiente'
+              ? 'Este documento ya fue revisado y no admite cambios.'
+              : procesando
+                ? 'La revisión estará disponible cuando termine el OCR.'
+                : '';
+      const puedeRevisar = !razonBloqueo;
+      $('#doc-bloqueo').textContent = razonBloqueo;
+      $('#doc-bloqueo').hidden = !razonBloqueo;
+      $('#doc-datos').hidden = !puedeRevisar;
+      $('#doc-datos-lectura').hidden = puedeRevisar;
+      $('#form-corregir-documento').hidden = !puedeRevisar;
+      $('#doc-nota').disabled = !puedeRevisar;
+      for (const id of ['doc-aprobar', 'doc-rechazar', 'doc-reprocesar', 'doc-guardar-correccion']) {
+        const boton = $(`#${id}`);
+        boton.disabled = !puedeRevisar || boton.getAttribute('aria-busy') === 'true';
+        boton.title = razonBloqueo;
+        boton.setAttribute('aria-describedby', 'doc-bloqueo');
+      }
+      $('#doc-guardar-motivo').textContent = puedeRevisar ? 'Se habilita al cambiar algún dato.' : razonBloqueo;
+      valoresInicialesDocumento = JSON.stringify(datosFormularioDocumento());
+      actualizarEstadoGuardarCorreccion();
+      actualizarNavegacionDocumento();
+    }
+
+    function consultaDocumentos() {
+      const form = $('#form-filtro-documentos');
+      const consulta = new URLSearchParams();
+      ['q', 'tipo'].forEach((campo) => {
+        const valor = form[campo].value.trim();
+        if (valor) consulta.set(campo, valor);
+      });
+      if (archivadosDocumentos) consulta.set('archivados', 'true');
+      else if (form.estado.value) consulta.set('estado', form.estado.value);
+      consulta.set('pagina', paginaDocumentos);
+      consulta.set('por_pagina', DOC_POR_PAGINA);
+      return consulta;
+    }
+
+    function textoCoincidencia(doc) {
+      if (!DOC_TIPOS_COMPARABLES.has(doc.tipo)) return { texto: 'No aplica', clase: 'doc-match doc-match--muted' };
+      if (doc.coincide_viaje === null) return { texto: 'Sin datos', clase: 'doc-match doc-match--muted' };
+      return doc.coincide_viaje
+        ? { texto: 'Coincide', clase: 'doc-match doc-match--ok' }
+        : { texto: 'No coincide', clase: 'doc-match doc-match--alert' };
+    }
+
+    function seleccionarDocumento(doc, marcado) {
+      if (marcado) seleccionDocumentos.add(Number(doc.id));
+      else seleccionDocumentos.delete(Number(doc.id));
+      $('#doc-seleccionados').textContent = `${seleccionDocumentos.size} seleccionados (máximo 20)`;
+    }
+
+    function selectorDocumento(doc) {
+      return el('input', {
+        type: 'checkbox',
+        'aria-label': `Seleccionar documento ${doc.folio} ${DOC_TIPOS[doc.tipo] || doc.tipo}`,
+        checked: seleccionDocumentos.has(Number(doc.id)),
+        onchange: (evento) => seleccionarDocumento(doc, evento.currentTarget.checked)
+      });
+    }
+
+    async function reintentarDocumento(doc, boton) {
+      boton.disabled = true;
+      boton.setAttribute('aria-busy', 'true');
+      try {
+        await api(`/documentos/${doc.id}/reprocesar`, { method: 'POST' });
+        await cargarDocumentos();
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        boton.removeAttribute('aria-busy');
+        boton.disabled = false;
+      }
+    }
+
+    async function archivarDocumento(doc) {
+      const motivo = prompt(`Motivo obligatorio para archivar ${doc.folio} · ${DOC_TIPOS[doc.tipo] || doc.tipo}:`);
+      if (motivo === null) return;
+      if (!motivo.trim()) {
+        mostrarAviso('Escribe un motivo para archivar.');
+        return;
+      }
+      if (!confirm('El documento quedará oculto, pero se conservarán el registro, la foto y la bitácora. ¿Continuar?')) return;
+      try {
+        await api(`/documentos/${doc.id}/archivar`, { method: 'POST', body: { motivo: motivo.trim() } });
+        seleccionarDocumento(doc, false);
+        await cargarDocumentos();
+        mostrarAviso('Documento archivado. Puedes restaurarlo desde la pestaña Archivados.');
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    async function restaurarDocumento(doc) {
+      try {
+        await api(`/documentos/${doc.id}/restaurar`, { method: 'POST' });
+        await cargarDocumentos();
+        mostrarAviso('Documento restaurado.');
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    function botonesDocumento(doc) {
+      const botones = [
+        el('button', { type: 'button', class: 'btn btn--accent btn--sm', onclick: () => abrirDocumento(doc.id) }, 'Revisar')
+      ];
+      if (doc.archivado_en) {
+        botones.push(el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => restaurarDocumento(doc) }, 'Restaurar'));
+      } else if (['pendiente', 'rechazado'].includes(doc.estado)) {
+        botones.push(el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => archivarDocumento(doc) }, 'Archivar'));
+      }
+      if (doc.ocr_estado === 'error') {
+        const propio = Number(doc.subido_por) === Number(usuarioActual()?.id);
+        const motivo = doc.archivado_en ? 'Documento archivado.'
+          : doc.estado !== 'pendiente' ? 'El documento ya fue revisado.'
+            : propio ? 'Otro administrador debe revisar el documento.'
+              : 'Reintenta la lectura OCR.';
+        botones.push(el('div', { class: 'doc-reintento' },
+          el('small', { class: 'doc-ocr-error', text: doc.ocr_error || 'Falló la lectura OCR.' }),
+          el('button', {
+            type: 'button',
+            class: 'btn btn--ghost btn--sm',
+            disabled: Boolean(doc.archivado_en) || doc.estado !== 'pendiente' || propio,
+            title: motivo,
+            'aria-describedby': 'doc-bloqueo',
+            onclick: (evento) => reintentarDocumento(doc, evento.currentTarget)
+          }, 'Reintentar lectura')));
+      }
+      return el('div', { class: 'doc-acciones' }, ...botones);
+    }
+
+    function miniaturaDocumento(doc, generacion) {
+      const marco = el('div', { class: 'doc-card__media' },
+        el('div', { class: 'doc-placeholder', text: 'Cargando imagen…' }));
+      apiImagenDocumento(`/documentos/${doc.id}/archivo?m=1`).then((blob) => {
+        const url = URL.createObjectURL(blob);
+        if (!marco.isConnected || generacion !== generacionGaleria) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        miniaturasDocumentos.push(url);
+        const imagen = el('img', {
+          class: 'doc-card__imagen',
+          alt: `Miniatura ${doc.folio} · ${DOC_TIPOS[doc.tipo] || doc.tipo}`,
+          loading: 'lazy',
+          src: url,
+          onerror: () => {
+            URL.revokeObjectURL(url);
+            marco.replaceChildren(el('div', { class: 'doc-placeholder', role: 'status', text: 'Archivo no disponible' }));
+          }
+        });
+        marco.replaceChildren(imagen);
+      }).catch(() => {
+        if (marco.isConnected && generacion === generacionGaleria) {
+          marco.replaceChildren(el('div', { class: 'doc-placeholder', role: 'status', text: 'Archivo no disponible' }));
+        }
+      });
+      return marco;
+    }
+
+    function renderizarDocumentoTabla(doc) {
+      const estado = doc.archivado_en ? DOC_ESTADOS.archivado : DOC_ESTADOS[doc.estado] || DOC_ESTADOS.pendiente;
+      const coincide = textoCoincidencia(doc);
+      const ocr = DOC_OCR_ESTADOS[doc.ocr_estado] || DOC_OCR_ESTADOS.error;
+      const fecha = new Date(doc.creado_en);
+      const creado = Number.isNaN(fecha.getTime()) ? '—' : fmtFechaHora.format(fecha);
+      return el('tr', {},
+        el('td', {}, selectorDocumento(doc)),
+        el('td', {}, el('b', { class: 'mono', text: doc.folio || 'Sin folio' }), el('small', { text: creado })),
+        el('td', { text: DOC_TIPOS[doc.tipo] || doc.tipo || 'Sin clasificar' }),
+        el('td', {}, el('span', { class: 'mono', text: doc.numero_guia || 'Guía no detectada' }), el('small', { class: coincide.clase, text: coincide.texto })),
+        el('td', {}, el('span', { class: `st st--${estado.clase}`, text: estado.texto }),
+          doc.estado === 'rechazado' && doc.nota_revision ? el('small', { class: 'doc-rechazo', text: doc.nota_revision }) : null),
+        el('td', {}, el('span', { class: `st st--${ocr.clase}`, text: ocr.texto }),
+          doc.ocr_estado === 'error' ? el('small', { class: 'doc-ocr-error', text: doc.ocr_error || 'Motivo no disponible' }) : null),
+        el('td', {}, botonesDocumento(doc)));
+    }
+
+    function renderizarDocumentoTarjeta(doc, generacion) {
+      const estado = doc.archivado_en ? DOC_ESTADOS.archivado : DOC_ESTADOS[doc.estado] || DOC_ESTADOS.pendiente;
+      const ocr = DOC_OCR_ESTADOS[doc.ocr_estado] || DOC_OCR_ESTADOS.error;
+      const coincide = textoCoincidencia(doc);
+      return el('article', { class: 'doc-card' },
+        miniaturaDocumento(doc, generacion),
+        el('div', { class: 'doc-card__contenido' },
+          el('div', { class: 'doc-card__titulo' },
+            selectorDocumento(doc),
+            el('b', { class: 'mono', text: doc.folio || 'Sin folio' }),
+            el('span', { class: `st st--${estado.clase}`, text: estado.texto })),
+          el('p', { text: DOC_TIPOS[doc.tipo] || doc.tipo || 'Sin clasificar' }),
+          el('p', { class: 'mono muted', text: doc.numero_guia || 'Guía no detectada' }),
+          el('span', { class: coincide.clase, text: coincide.texto }),
+          el('span', { class: `st st--${ocr.clase}`, text: ocr.texto }),
+          doc.ocr_estado === 'error' ? el('small', { class: 'doc-ocr-error', text: doc.ocr_error || 'Motivo no disponible' }) : null,
+          doc.estado === 'rechazado' && doc.nota_revision ? el('small', { class: 'doc-rechazo', text: doc.nota_revision }) : null,
+          botonesDocumento(doc)));
+    }
+
+    async function ejecutarLote(accion) {
+      const ids = [...seleccionDocumentos];
+      if (!ids.length) {
+        mostrarAviso('Selecciona al menos un documento.');
+        return;
+      }
+      if (ids.length > 20) {
+        mostrarAviso('Puedes seleccionar como máximo 20 documentos por operación.');
+        return;
+      }
+      let motivo;
+      if (accion === 'archivar') {
+        motivo = prompt('Motivo obligatorio para archivar los documentos seleccionados:');
+        if (motivo === null) return;
+        if (!motivo.trim()) {
+          mostrarAviso('Escribe un motivo para archivar.');
+          return;
+        }
+        if (!confirm(`Se archivarán hasta ${ids.length} documentos sin borrar fotos ni bitácoras. ¿Continuar?`)) return;
+      }
+      const boton = accion === 'archivar' ? $('#doc-lote-archivar') : $('#doc-lote-reintentar');
+      boton.disabled = true;
+      boton.setAttribute('aria-busy', 'true');
+      try {
+        const respuesta = await api('/documentos/lote', {
+          method: 'POST',
+          body: { accion, ids, motivo }
+        });
+        const resultados = respuesta.resultados.map((resultado) => {
+          if (resultado.ok) seleccionDocumentos.delete(Number(resultado.id));
+          return el('li', { class: resultado.ok ? 'doc-lote-ok' : 'doc-lote-error' },
+            el('b', { text: `Documento ${resultado.id}` }),
+            el('span', { text: resultado.message }));
+        });
+        $('#doc-lote-resultados').replaceChildren(...resultados);
+        $('#doc-seleccionados').textContent = `${seleccionDocumentos.size} seleccionados (máximo 20)`;
+        await cargarDocumentos();
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        boton.disabled = false;
+        boton.removeAttribute('aria-busy');
+      }
+    }
+
+    function actualizarTabsDocumentos() {
+      const estado = archivadosDocumentos ? 'archivado' : $('#form-filtro-documentos').estado.value;
+      $$('#doc-tabs [data-doc-estado]').forEach((boton) =>
+        boton.setAttribute('aria-selected', String(boton.dataset.docEstado === estado)));
+    }
+
+    async function cargarDocumentos() {
+      const consulta = consultaDocumentos();
+      const respuesta = await api(`/documentos?${consulta}`);
+      const conteo = respuesta.conteo;
+      documentosVisibles = respuesta.documentos;
+      $('#doc-pendientes').textContent = fmtNumero.format(conteo.pendiente || 0);
+      actualizarBurbujaDocumentos(conteo.pendiente || 0);
+      $('#doc-aprobados').textContent = fmtNumero.format(conteo.aprobado || 0);
+      $('#doc-rechazados').textContent = fmtNumero.format(conteo.rechazado || 0);
+      $('#doc-conteo-todos').textContent = fmtNumero.format((conteo.pendiente || 0) + (conteo.aprobado || 0) + (conteo.rechazado || 0));
+      $('#doc-conteo-pendiente').textContent = fmtNumero.format(conteo.pendiente || 0);
+      $('#doc-conteo-aprobado').textContent = fmtNumero.format(conteo.aprobado || 0);
+      $('#doc-conteo-rechazado').textContent = fmtNumero.format(conteo.rechazado || 0);
+      $('#doc-conteo-archivado').textContent = fmtNumero.format(conteo.archivado || 0);
+      actualizarTabsDocumentos();
+      $('#doc-total').textContent = `${fmtNumero.format(respuesta.total)} documento${respuesta.total === 1 ? '' : 's'}`;
+      const hayOcrEnProceso = respuesta.documentos.some((doc) => doc.ocr_estado === 'procesando');
+      miniaturasDocumentos.forEach((url) => URL.revokeObjectURL(url));
+      miniaturasDocumentos = [];
+      const generacion = ++generacionGaleria;
+      let contenedor;
+      if (vistaDocumentos === 'lista') {
+        const tabla = el('table', { class: 'doc-tabla' },
+          el('thead', {}, el('tr', {},
+            el('th', { scope: 'col', text: 'Elegir' }),
+            el('th', { scope: 'col', text: 'Viaje / fecha' }),
+            el('th', { scope: 'col', text: 'Tipo' }),
+            el('th', { scope: 'col', text: 'Guía / coincidencia' }),
+            el('th', { scope: 'col', text: 'Estado' }),
+            el('th', { scope: 'col', text: 'OCR' }),
+            el('th', { scope: 'col', text: 'Acciones' }))),
+          el('tbody', {}, ...respuesta.documentos.map(renderizarDocumentoTabla)));
+        contenedor = el('div', { class: 'doc-tabla-scroll' }, tabla);
+      } else {
+        contenedor = el('div', { class: 'doc-galeria doc-galeria--tarjetas' },
+          ...respuesta.documentos.map((doc) => renderizarDocumentoTarjeta(doc, generacion)));
+      }
+      $('#galeria-documentos').replaceChildren(respuesta.documentos.length
+        ? contenedor
+        : el('p', { class: 'empty', text: 'No hay documentos con esos filtros.' }));
+      $('#doc-pagina').textContent = `Página ${respuesta.pagina} de ${respuesta.paginas}`;
+      $('#doc-anterior').disabled = respuesta.pagina <= 1;
+      $('#doc-siguiente').disabled = respuesta.pagina >= respuesta.paginas;
+      if (documentoActual?.ocr_estado === 'procesando') {
+        const actualizado = respuesta.documentos.find((doc) => Number(doc.id) === Number(documentoActual.id));
+        if (actualizado && actualizado.ocr_estado !== 'procesando') {
+          actualizarDetalleDocumento(await api(`/documentos/${actualizado.id}`));
+        }
+      }
+      if (hayOcrEnProceso) programarActualizacionOcr();
+      else clearTimeout(temporizadorOcrDocumentos);
+      actualizarNavegacionDocumento();
+    }
+
+    function actualizarBurbujaDocumentos(total) {
+      const burbuja = $('#nav-documentos-pendientes');
+      const pendientes = Math.max(0, Number(total) || 0);
+      burbuja.textContent = pendientes > 99 ? '99+' : String(pendientes);
+      burbuja.hidden = pendientes === 0;
+      burbuja.setAttribute('aria-label', `${pendientes} documento${pendientes === 1 ? '' : 's'} pendiente${pendientes === 1 ? '' : 's'}`);
+    }
+
+    async function cargarConteoDocumentos() {
+      const respuesta = await api('/documentos?por_pagina=4');
+      actualizarBurbujaDocumentos(respuesta.conteo?.pendiente);
+    }
+
+    async function apiImagenDocumento(ruta) {
+      const token = sesion.leer()?.token;
+      const respuesta = await fetch(API_URL + ruta, {
+        cache: 'no-store',
+        headers: { ...(token && { Authorization: ['Bearer', token].join(' ') }) }
+      });
+      if (respuesta.status === 401 && token) {
+        cerrarSesion();
+      }
+      if (!respuesta.ok) {
+        const datos = await respuesta.json().catch(() => ({}));
+        throw Object.assign(new Error(datos.message || `Error ${respuesta.status}`), { status: respuesta.status });
+      }
+      return respuesta.blob();
+    }
+
+    async function abrirDocumento(id) {
+      try {
+        const doc = await api(`/documentos/${id}`);
+        let imagen = null;
+        archivoDocumentoDisponible = true;
+        try {
+          imagen = await apiImagenDocumento(`/documentos/${id}/archivo`);
+        } catch (error) {
+          if (error.status !== 404) throw error;
+          archivoDocumentoDisponible = false;
+        }
+        if (urlImagenDocumento) URL.revokeObjectURL(urlImagenDocumento);
+        urlImagenDocumento = imagen ? URL.createObjectURL(imagen) : null;
+        $('#doc-titulo').textContent = `${doc.folio || 'Documento'} · ${DOC_TIPOS[doc.tipo] || doc.tipo || 'Sin clasificar'}`;
+        $('#doc-subtitulo').textContent = `Subido por ${doc.subio || '—'}`;
+        $('#doc-imagen').hidden = !imagen;
+        $('#doc-foto-no-disponible').hidden = Boolean(imagen);
+        if (imagen) $('#doc-imagen').src = urlImagenDocumento;
+        $('#doc-nota').value = doc.nota_revision || '';
+        actualizarDetalleDocumento(doc);
+        $('#doc-datos').hidden = true;
+        $('#doc-datos-lectura').hidden = true;
+        $$('#dlg-documento [data-doc-panel-content]').forEach((panel) => { panel.hidden = panel.dataset.docPanelContent !== 'datos'; });
+        $$('#dlg-documento [data-doc-panel]').forEach((tab) => tab.setAttribute('aria-selected', String(tab.dataset.docPanel === 'datos')));
+        $('#dlg-documento').showModal();
+        cargarBitacoraDocumento().catch((error) => mostrarAviso(error.message));
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    async function revisarDocumento(estado, boton) {
+      if (!documentoActual) return;
+      const nota = $('#doc-nota').value.trim();
+      if (estado === 'aprobado' && DOC_TIPOS_COMPARABLES.has(documentoActual.tipo) && documentoActual.coincide_viaje === false && !nota) {
+        mostrarAviso('Justifica en una nota por qué apruebas un documento que no coincide con el viaje.');
+        $('#doc-nota').focus();
+        return;
+      }
+      if (estado === 'rechazado' && !nota) {
+        mostrarAviso('Escribe el motivo del rechazo.');
+        $('#doc-nota').focus();
+        return;
+      }
+      boton.disabled = true;
+      boton.setAttribute('aria-busy', 'true');
+      try {
+        const actualizado = await api(`/documentos/${documentoActual.id}/revision`, {
+          method: 'PATCH',
+          body: { estado, nota }
+        });
+        actualizarDetalleDocumento(actualizado);
+        await cargarDocumentos();
+        await cargarBitacoraDocumento();
+        mostrarAviso(estado === 'aprobado' ? 'Documento aprobado.' : 'Documento rechazado.');
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        boton.removeAttribute('aria-busy');
+        if (documentoActual) actualizarDetalleDocumento(documentoActual);
+      }
+    }
+
+    async function optimizarImagen(archivo) {
+      if (typeof createImageBitmap !== 'function') {
+        throw new Error('Este navegador no puede optimizar la imagen. Actualízalo o toma una foto más pequeña.');
+      }
+      let imagen;
+      try {
+        imagen = await createImageBitmap(archivo);
+      } catch (error) {
+        throw new Error(`No se pudo preparar la imagen: ${error.message}`);
+      }
+      const escala = Math.min(1, 2400 / Math.max(imagen.width, imagen.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(imagen.width * escala));
+      canvas.height = Math.max(1, Math.round(imagen.height * escala));
+      const contexto = canvas.getContext('2d', { alpha: false });
+      if (!contexto) {
+        imagen.close();
+        throw new Error('No se pudo preparar la imagen para subirla.');
+      }
+      contexto.drawImage(imagen, 0, 0, canvas.width, canvas.height);
+      imagen.close();
+      const comprimida = await new Promise((resolver) => canvas.toBlob(resolver, 'image/jpeg', 0.92));
+      if (!comprimida) throw new Error('El navegador no pudo comprimir la imagen.');
+      return new File([comprimida], archivo.name.replace(/\.[^.]+$/, '.jpg'), {
+        type: 'image/jpeg',
+        lastModified: archivo.lastModified
+      });
+    }
+
+    async function evaluarCalidadArchivo(archivo) {
+      const imagen = await createImageBitmap(archivo);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 160;
+        canvas.height = 120;
+        const contexto = canvas.getContext('2d', { willReadFrequently: true });
+        if (!contexto) throw new Error('Este navegador no permite analizar la foto.');
+        contexto.drawImage(imagen, 0, 0, canvas.width, canvas.height);
+        const calidad = medirCalidadFotograma(canvas);
+        if (!calidad) throw new Error('Este navegador no permite analizar la foto.');
+        $('#doc-indicador-luz').textContent = `Iluminación: ${Math.round(calidad.brillo)} · ${calidad.luzBuena ? 'adecuada' : 'ajustar'}`;
+        $('#doc-indicador-enfoque').textContent = `Enfoque: ${Math.round(calidad.enfoque)} · ${calidad.enfoqueBueno ? 'adecuado' : 'ajustar'}`;
+        return calidad;
+      } finally {
+        imagen.close();
+      }
+    }
+
+    async function subirDocumento(viajeId, archivo, boton, exigirCalidad = false) {
+      if (!archivo) {
+        mostrarAviso('Toma una foto o selecciona una imagen.');
+        return;
+      }
+      boton.disabled = true;
+      boton.setAttribute('aria-busy', 'true');
+      const textoOriginal = boton.textContent;
+      try {
+        boton.textContent = 'Optimizando imagen…';
+        const imagen = await optimizarImagen(archivo);
+        if (imagen.size > 5 * 1024 * 1024) throw new Error('La imagen optimizada pesa más de 5 MB.');
+        const calidad = await evaluarCalidadArchivo(imagen);
+        const calidadAdecuada = calidad.luzBuena && calidad.enfoqueBueno;
+        const observacionCalidad = `Luz ${Math.round(calidad.brillo)} · enfoque ${Math.round(calidad.enfoque)} · ${calidadAdecuada ? 'foto validada.' : 'revisa la legibilidad.'}`;
+        $('#doc-calidad').textContent = observacionCalidad;
+        if (!calidadAdecuada) {
+          const ajustes = [
+            !calidad.luzBuena && 'mejor iluminación',
+            !calidad.enfoqueBueno && 'más enfoque'
+          ].filter(Boolean).join(' y ');
+          $('#doc-captura-motivo').textContent = `La foto podría ser difícil de leer; intenta ${ajustes}.`;
+          if (exigirCalidad || !window.confirm(`La foto podría ser difícil de leer (${ajustes}). ¿Quieres subirla de todos modos?`)) {
+            $('#doc-escaner-estado').textContent = exigirCalidad
+              ? `Captura no enviada: ${ajustes}.`
+              : 'Foto no enviada. Puedes elegir otra imagen o confirmar de nuevo para continuar.';
+            return;
+          }
+        } else {
+          $('#doc-captura-motivo').textContent = 'Foto validada: iluminación y enfoque adecuados.';
+        }
+        const datos = new FormData();
+        datos.set('viaje_id', viajeId);
+        datos.set('imagen', imagen, imagen.name);
+        const token = sesion.leer()?.token;
+        boton.textContent = 'Subiendo archivo…';
+        $('#doc-escaner-estado').textContent = 'Enviando foto al servidor…';
+        if (urlVistaPreviaDocumento) URL.revokeObjectURL(urlVistaPreviaDocumento);
+        urlVistaPreviaDocumento = URL.createObjectURL(imagen);
+        $('#doc-preview').src = urlVistaPreviaDocumento;
+        $('#doc-preview').hidden = false;
+        $('#doc-camara-apagada').hidden = true;
+        $('#doc-video').hidden = true;
+        const respuesta = await fetch(`${API_URL}/documentos`, {
+          method: 'POST',
+          headers: { ...(token && { Authorization: ['Bearer', token].join(' ') }) },
+          body: datos
+        });
+        const resultado = await respuesta.json().catch(() => ({}));
+        if (respuesta.status === 401 && token) cerrarSesion();
+        if (!respuesta.ok) throw new Error(resultado.message || `Error ${respuesta.status}`);
+        $('#doc-archivo-viaje').value = '';
+        detenerCamaraDocumento();
+        $('#doc-escaner-estado').textContent = 'Resultado: comprobante guardado. La lectura OCR está en proceso.';
+        mostrarAviso(resultado.aviso_ocr || 'Comprobante guardado. El OCR se está procesando.');
+        await refrescarDetalle();
+      } catch (error) {
+        $('#doc-archivo-viaje').value = '';
+        $('#doc-escaner-estado').textContent = `Resultado: no se pudo enviar la foto. ${error.message}`;
+        mostrarAviso(error.message);
+      } finally {
+        boton.textContent = textoOriginal;
+        boton.disabled = boton.id === 'doc-capturar' && (!camaraDocumento || fotogramasBuenos < 3);
+        boton.removeAttribute('aria-busy');
+        $('#doc-archivo-viaje').value = '';
+      }
+    }
+
+    async function guardarCorreccionDocumento(form, boton) {
+      if (!documentoActual) return;
+      boton.disabled = true;
+      boton.setAttribute('aria-busy', 'true');
+      try {
+        const datos = Object.fromEntries(new FormData(form));
+        datos.fecha = fechaDocumentoApi(String(datos.fecha || '').trim());
+        const actualizado = await api(`/documentos/${documentoActual.id}`, {
+          method: 'PATCH',
+          body: datos
+        });
+        actualizarDetalleDocumento(actualizado);
+        await Promise.all([cargarDocumentos(), cargarBitacoraDocumento()]);
+        mostrarAviso('Corrección guardada y registrada en la bitácora.');
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        boton.removeAttribute('aria-busy');
+        actualizarEstadoGuardarCorreccion();
+      }
+    }
+
+    async function capturarFotogramaDocumento() {
+      const video = $('#doc-video');
+      if (!camaraDocumento || fotogramasBuenos < 3 || !video.videoWidth) return;
+      const canvas = document.createElement('canvas');
+      const escala = Math.min(1, 2400 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * escala);
+      canvas.height = Math.round(video.videoHeight * escala);
+      const contexto = canvas.getContext('2d', { alpha: false });
+      contexto.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imagen = await new Promise((resolver) => canvas.toBlob(resolver, 'image/jpeg', 0.92));
+      if (!imagen) throw new Error('No se pudo capturar la imagen.');
+      const archivo = new File([imagen], `comprobante-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      $('#doc-escaner-estado').textContent = 'Vista previa: foto capturada, preparando el envío…';
+      await subirDocumento(viajeEscaner.id, archivo, $('#doc-capturar'), true);
+    }
+
+    function iniciarEscanerDocumento() {
+      const seguro = window.isSecureContext && Boolean(navigator.mediaDevices?.getUserMedia);
+      $('#doc-abrir-camara').hidden = !seguro;
+      $('#doc-calidad').textContent = seguro
+        ? 'Asegura buena luz y enfoca el comprobante completo.'
+        : 'La cámara en vivo requiere HTTPS o localhost. Puedes elegir una foto de galería.';
+      $('#doc-escaner').hidden = false;
+      $('#doc-escaner-estado').textContent = 'Cámara apagada. Abre la cámara o elige una foto para comenzar.';
+      $('#doc-camara-apagada').hidden = false;
+      $('#doc-video').hidden = true;
+      $('#doc-preview').hidden = true;
+      cargarAvisoPrivacidadOcr().catch((error) => {
+        $('#doc-privacidad-escaner').textContent = `No se pudo consultar la configuración OCR: ${error.message}`;
+      });
+    }
+
+    async function cargarAvisoPrivacidadOcr() {
+      const motor = await api('/documentos/ocr-config');
+      const aviso = motor.externo
+        ? `El OCR usa ${motor.nombre}. La imagen se envía al proveedor externo para procesarse. Las identificaciones no conservan su texto OCR.`
+        : `El OCR usa ${motor.nombre}; la imagen se procesa en este servidor. Las identificaciones no conservan su texto OCR.`;
+      $('#doc-privacidad-escaner').textContent = aviso;
+      $('#doc-aviso-privacidad').textContent = `El motor OCR configurado es ${motor.nombre}. ${motor.externo ? 'Las imágenes se envían a ese proveedor externo.' : 'Las imágenes se procesan localmente.'} En identificaciones no se almacena el texto OCR completo.`;
+    }
+
+    async function cargarBitacoraDocumento() {
+      if (!documentoActual) return;
+      const registros = await api(`/documentos/${documentoActual.id}/bitacora`);
+      const agrupados = [];
+      for (const registro of registros) {
+        const anterior = agrupados[agrupados.length - 1];
+        if (registro.accion === 'visto' && anterior?.registro.accion === 'visto'
+            && anterior.registro.usuario === registro.usuario) {
+          anterior.repeticiones++;
+        } else {
+          agrupados.push({ registro, repeticiones: 1 });
+        }
+      }
+      const filas = agrupados.map(({ registro, repeticiones }) => {
+        const fecha = new Date(registro.creado_en);
+        const momento = Number.isNaN(fecha.getTime()) ? '—' : fmtFechaHora.format(fecha);
+        return el('li', {},
+          el('b', { text: `${registro.accion}${repeticiones > 1 ? ` ×${repeticiones}` : ''} · ${registro.usuario || 'Sistema'}` }),
+          el('small', { text: `${momento}${registro.nota ? ` · ${registro.nota}` : ''}` }));
+      });
+      $('#doc-bitacora').replaceChildren(...(filas.length ? filas
+        : [el('li', {}, el('small', { text: 'No hay movimientos registrados.' }))]));
+    }
+
+    function iniciarDocumentos() {
+      const formFiltro = $('#form-filtro-documentos');
+      const tipos = $('#doc-tipo');
+      const tipoCorreccion = $('#doc-corr-tipo');
+      Object.entries(DOC_TIPOS).forEach(([valor, texto]) => tipos.append(el('option', { value: valor, text: texto })));
+      Object.entries(DOC_TIPOS).forEach(([valor, texto]) => tipoCorreccion.append(el('option', { value: valor, text: texto })));
+
+      formFiltro.addEventListener('submit', (e) => {
+        e.preventDefault();
+        paginaDocumentos = 1;
+        archivadosDocumentos = false;
+        actualizarTabsDocumentos();
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      });
+      formFiltro.addEventListener('reset', () => setTimeout(() => {
+        paginaDocumentos = 1;
+        archivadosDocumentos = false;
+        actualizarTabsDocumentos();
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      }));
+      $$('#doc-tabs [data-doc-estado]').forEach((boton) => boton.addEventListener('click', () => {
+        archivadosDocumentos = boton.dataset.docEstado === 'archivado';
+        formFiltro.estado.value = archivadosDocumentos ? '' : boton.dataset.docEstado;
+        paginaDocumentos = 1;
+        seleccionDocumentos.clear();
+        actualizarTabsDocumentos();
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      }));
+      $$('[data-doc-vista]').forEach((boton) => boton.addEventListener('click', () => {
+        vistaDocumentos = boton.dataset.docVista;
+        $$('[data-doc-vista]').forEach((elemento) => elemento.setAttribute('aria-pressed', String(elemento === boton)));
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      }));
+      $('#doc-lote-archivar').addEventListener('click', () => ejecutarLote('archivar'));
+      $('#doc-lote-reintentar').addEventListener('click', () => ejecutarLote('reintentar_ocr'));
+      $('#doc-anterior').addEventListener('click', () => {
+        paginaDocumentos = Math.max(1, paginaDocumentos - 1);
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      });
+      $('#doc-siguiente').addEventListener('click', () => {
+        paginaDocumentos += 1;
+        cargarDocumentos().catch((error) => mostrarAviso(error.message));
+      });
+      $('#form-corregir-documento').addEventListener('submit', (e) => {
+        e.preventDefault();
+        guardarCorreccionDocumento(e.currentTarget, $('#doc-guardar-correccion'));
+      });
+      $('#form-corregir-documento').addEventListener('input', actualizarEstadoGuardarCorreccion);
+      $('#form-corregir-documento').addEventListener('change', (evento) => {
+        if (evento.target.id === 'doc-corr-tipo' && evento.target.value === 'identificacion') {
+          $('#doc-corr-texto').value = '';
+          $('#doc-corr-texto').closest('.f').hidden = true;
+          for (const id of ['doc-corr-fecha', 'doc-corr-receptor', 'doc-corr-monto']) $(`#${id}`).value = '';
+        }
+        actualizarEstadoGuardarCorreccion();
+      });
+      $$('#dlg-documento [data-doc-panel]').forEach((boton) => boton.addEventListener('click', () => {
+        const panelActivo = boton.dataset.docPanel;
+        $$('#dlg-documento [data-doc-panel]').forEach((tab) =>
+          tab.setAttribute('aria-selected', String(tab === boton)));
+        $$('#dlg-documento [data-doc-panel-content]').forEach((panel) => {
+          panel.hidden = panel.dataset.docPanelContent !== panelActivo;
+        });
+      }));
+      $('#doc-copiar-ocr').addEventListener('click', async (e) => {
+        try {
+          await navigator.clipboard.writeText($('#doc-ocr').textContent);
+          mostrarAviso('Texto OCR copiado.');
+        } catch (error) {
+          mostrarAviso(`No se pudo copiar el texto OCR: ${error.message}`);
+        }
+      });
+      $('#doc-corr-fecha').addEventListener('input', (e) => {
+        e.currentTarget.value = e.currentTarget.value.replace(/[^\d/]/g, '').slice(0, 10);
+      });
+      $('#dv-escanear').addEventListener('click', iniciarEscanerDocumento);
+      $('#doc-abrir-camara').addEventListener('click', async (e) => {
+        const boton = e.currentTarget;
+        boton.setAttribute('aria-busy', 'true');
+        try { await abrirCamaraDocumento(); } finally { boton.removeAttribute('aria-busy'); }
+      });
+      $('#doc-capturar').addEventListener('click', (e) => {
+        const boton = e.currentTarget;
+        boton.disabled = true;
+        capturarFotogramaDocumento()
+          .catch((error) => mostrarAviso(error.message))
+          .finally(() => { if (camaraDocumento) boton.disabled = fotogramasBuenos < 3; });
+      });
+      $('#doc-archivo-viaje').addEventListener('change', (e) => {
+        const archivo = e.currentTarget.files[0];
+        if (archivo && viajeEscaner) subirDocumento(viajeEscaner.id, archivo, $('#dv-escanear'));
+      });
+      $('#doc-cerrar-camara').addEventListener('click', cerrarEscanerDocumento);
+      $('#doc-aprobar').addEventListener('click', (e) => revisarDocumento('aprobado', e.currentTarget));
+      $('#doc-rechazar').addEventListener('click', (e) => revisarDocumento('rechazado', e.currentTarget));
+      $('#doc-reprocesar').addEventListener('click', async (e) => {
+        if (!documentoActual) return;
+        const boton = e.currentTarget;
+        boton.disabled = true;
+        boton.setAttribute('aria-busy', 'true');
+        try {
+          const actualizado = await api(`/documentos/${documentoActual.id}/reprocesar`, { method: 'POST' });
+          actualizarDetalleDocumento(actualizado);
+          await cargarDocumentos();
+          mostrarAviso('Documento en cola para reprocesar con OCR.');
+        } catch (error) {
+          mostrarAviso(error.message);
+        } finally {
+          boton.removeAttribute('aria-busy');
+          if (documentoActual) actualizarDetalleDocumento(documentoActual);
+        }
+      });
+      const confirmarCierreDocumento = () => {
+        const cambios = JSON.stringify(datosFormularioDocumento()) !== valoresInicialesDocumento;
+        if (cambios && !confirm('Hay cambios sin guardar. ¿Cerrar sin guardarlos?')) return;
+        $('#dlg-documento').close();
+      };
+      $('#doc-cerrar').addEventListener('click', confirmarCierreDocumento);
+      $('#dlg-documento').addEventListener('cancel', (evento) => {
+        const cambios = JSON.stringify(datosFormularioDocumento()) !== valoresInicialesDocumento;
+        if (cambios && !confirm('Hay cambios sin guardar. ¿Cerrar sin guardarlos?')) evento.preventDefault();
+      });
+      $('#doc-cargar-bitacora').addEventListener('click', (e) => {
+        const boton = e.currentTarget;
+        boton.disabled = true;
+        boton.setAttribute('aria-busy', 'true');
+        cargarBitacoraDocumento()
+          .catch((error) => mostrarAviso(error.message))
+          .finally(() => { boton.disabled = false; boton.removeAttribute('aria-busy'); });
+      });
+      $('#doc-anterior-pendiente').addEventListener('click', () => {
+        const indice = documentosVisibles.findIndex((doc) => Number(doc.id) === Number(documentoActual?.id));
+        const anterior = documentosVisibles.slice(0, indice).reverse().find((doc) =>
+          doc.estado === 'pendiente' && !doc.archivado_en && Number(doc.subido_por) !== Number(usuarioActual()?.id));
+        if (anterior) abrirDocumento(anterior.id);
+      });
+      $('#doc-siguiente-pendiente').addEventListener('click', () => {
+        const indice = documentosVisibles.findIndex((doc) => Number(doc.id) === Number(documentoActual?.id));
+        const siguiente = documentosVisibles.slice(indice + 1).find((doc) =>
+          doc.estado === 'pendiente' && !doc.archivado_en && Number(doc.subido_por) !== Number(usuarioActual()?.id));
+        if (siguiente) abrirDocumento(siguiente.id);
+      });
+      $('#dlg-documento').addEventListener('close', () => {
+        if (urlImagenDocumento) URL.revokeObjectURL(urlImagenDocumento);
+        urlImagenDocumento = null;
+        $('#doc-imagen').removeAttribute('src');
+        $('#doc-imagen').hidden = true;
+        $('#doc-foto-no-disponible').hidden = true;
+        documentoActual = null;
+        valoresInicialesDocumento = '';
+        $('#doc-bitacora').replaceChildren(el('li', {}, el('small', { text: 'Selecciona Actualizar para consultar la bitácora.' })));
+      });
+      cargarAvisoPrivacidadOcr().catch((error) => {
+        $('#doc-aviso-privacidad').textContent = `No se pudo consultar la configuración OCR: ${error.message}`;
+      });
+    }
+
     /* ---------- Flota ---------- */
     let unidadEditando = null;
 
@@ -1977,6 +3111,7 @@
       iniciarAsignacion();
       iniciarPersonal();
       iniciarHistorial();
+      iniciarDocumentos();
       iniciarFlota();
       iniciarTrafico();
       iniciarDetalle();

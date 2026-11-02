@@ -305,6 +305,76 @@
       </div>
     </section>
 
+    <!-- ===================== DOCUMENTOS ===================== -->
+    <section class="screen" id="documentos" data-rol="admin" aria-labelledby="t-documentos">
+      <div class="wrap">
+        <header class="bar">
+          <div>
+            <p class="eyebrow">Comprobantes de viaje · lectura OCR y revisión</p>
+            <h1 id="t-documentos">Control de documentos</h1>
+          </div>
+        </header>
+        <p class="doc-privacidad" id="doc-aviso-privacidad" role="note">Consultando la configuración del OCR…</p>
+
+        <div class="kpis kpis--3">
+          <article class="kpi"><small>Pendientes</small><b class="c-amber" id="doc-pendientes">—</b><em>Por revisar</em></article>
+          <article class="kpi"><small>Aprobados</small><b class="c-green" id="doc-aprobados">—</b><em>Comprobantes validados</em></article>
+          <article class="kpi"><small>Rechazados</small><b id="doc-rechazados">—</b><em>Requieren corrección</em></article>
+        </div>
+
+        <form class="panel hi-filtros" id="form-filtro-documentos" role="search" aria-label="Filtrar documentos">
+          <label class="f"><span>Buscar</span><input type="search" name="q" maxlength="80" placeholder="Folio, guía o texto OCR…"></label>
+          <label class="f"><span>Estado</span>
+            <select name="estado">
+              <option value="">Todos</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="aprobado">Aprobado</option>
+              <option value="rechazado">Rechazado</option>
+            </select>
+          </label>
+          <label class="f"><span>Tipo</span>
+            <select name="tipo" id="doc-tipo"><option value="">Todos</option></select>
+          </label>
+          <div class="hi-filtros__botones">
+            <button type="reset" class="btn btn--ghost">Limpiar</button>
+            <button type="submit" class="btn btn--accent">Filtrar</button>
+          </div>
+        </form>
+
+        <article class="panel">
+          <header class="panel__head doc-lista__head">
+            <h2>Documentos recibidos</h2>
+            <div class="doc-vistas" role="group" aria-label="Vista de documentos">
+              <button type="button" class="btn btn--ghost btn--sm" data-doc-vista="lista" aria-pressed="true">Lista</button>
+              <button type="button" class="btn btn--ghost btn--sm" data-doc-vista="tarjetas" aria-pressed="false">Tarjetas</button>
+            </div>
+            <span class="muted" id="doc-total">—</span>
+          </header>
+          <nav class="doc-tabs" id="doc-tabs" role="tablist" aria-label="Estado de documentos">
+            <button type="button" role="tab" data-doc-estado="" aria-selected="true">Todos <span id="doc-conteo-todos">0</span></button>
+            <button type="button" role="tab" data-doc-estado="pendiente" aria-selected="false">Pendientes <span id="doc-conteo-pendiente">0</span></button>
+            <button type="button" role="tab" data-doc-estado="aprobado" aria-selected="false">Aprobados <span id="doc-conteo-aprobado">0</span></button>
+            <button type="button" role="tab" data-doc-estado="rechazado" aria-selected="false">Rechazados <span id="doc-conteo-rechazado">0</span></button>
+            <button type="button" role="tab" data-doc-estado="archivado" aria-selected="false">Archivados <span id="doc-conteo-archivado">0</span></button>
+          </nav>
+          <div class="doc-lote">
+            <span id="doc-seleccionados">0 seleccionados (máximo 20)</span>
+            <button type="button" class="btn btn--ghost btn--sm" id="doc-lote-archivar">Archivar</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="doc-lote-reintentar">Reintentar OCR</button>
+          </div>
+          <ul class="doc-lote-resultados" id="doc-lote-resultados" aria-live="polite"></ul>
+          <div class="doc-galeria" id="galeria-documentos" aria-live="polite">
+            <p class="muted">Cargando documentos…</p>
+          </div>
+          <nav class="hi-paginas" aria-label="Páginas de documentos">
+            <button type="button" class="btn btn--ghost btn--sm" id="doc-anterior">← Anterior</button>
+            <span class="muted" id="doc-pagina" aria-live="polite">—</span>
+            <button type="button" class="btn btn--ghost btn--sm" id="doc-siguiente">Siguiente →</button>
+          </nav>
+        </article>
+      </div>
+    </section>
+
     <!-- ===================== PERSONAL Y ROLES ===================== -->
     <section class="screen" id="personal" aria-labelledby="t-personal">
       <div class="wrap">

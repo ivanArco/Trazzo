@@ -226,6 +226,19 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 | GET | `/api/viajes/historial` | Con sesión | Todos los viajes: `?q=&estado=&desde=&hasta=&pagina=&por_pagina=`; con `&formato=csv` descarga para Excel |
 | GET | `/api/viajes/resumen` | Con sesión | KPIs del tablero y estado de la flota |
 | GET | `/api/viajes/eventos` | Con sesión | Actividad reciente |
+| POST | `/api/documentos` | Admin / operador del viaje | Sube imagen JPG/PNG/WebP (5 MB máximo) y responde `202` mientras el OCR se procesa |
+| GET | `/api/documentos/ocr-config` | Admin / operador | Informa el motor OCR configurado y si envía imágenes fuera del servidor |
+| GET | `/api/documentos` | Admin | Galería privada, filtros, paginación y conteos |
+| POST | `/api/documentos/lote` | Admin | Archiva o reintenta OCR para hasta 20 documentos y devuelve un resultado por id |
+| GET | `/api/documentos/viaje/:id` | Admin / operador asignado | Lista resumida; el operador no recibe texto OCR ni bitácora |
+| GET | `/api/documentos/:id` | Admin | Datos extraídos, texto OCR (excepto identificaciones) y revisión |
+| GET | `/api/documentos/:id/archivo` | Admin | Foto privada; `?m=1` sirve miniatura sin auditar como vista completa |
+| GET | `/api/documentos/:id/bitacora` | Admin | Bitácora de solo inserción |
+| PATCH | `/api/documentos/:id` | Admin ajeno al documento | Corrige datos OCR en estado pendiente |
+| PATCH | `/api/documentos/:id/revision` | Admin ajeno al documento | Aprueba o rechaza; ambos estados son finales |
+| POST | `/api/documentos/:id/reprocesar` | Admin ajeno al documento | Repite el OCR de un documento pendiente |
+| POST | `/api/documentos/:id/archivar` | Admin | Archiva de forma lógica un pendiente o rechazado, con motivo obligatorio |
+| POST | `/api/documentos/:id/restaurar` | Admin | Restaura un documento archivado permitido |
 | POST | `/api/viajes` | Admin / capturista | Registrar ruta; el folio `TRZ-0000` se genera solo |
 | PATCH | `/api/viajes/:id/asignar` | Admin / capturista | `{ operador_id, unidad_id }` |
 | PATCH | `/api/viajes/:id/estado` | Admin / capturista / operador del viaje | `{ estado, nota }` |
@@ -249,6 +262,24 @@ automáticamente con otro modelo (`fallbacks: "default"`).
 
 Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token en `Authorization: Bearer <token>`. Su dirección se configura en la constante `API_URL` de `index.html`.
 
+### Gestión digital de documentos y OCR
+
+El módulo **Gestión Digital de Documentos y OCR** permite adjuntar comprobantes de viaje desde la cámara o la galería del celular, vincularlos al viaje y procesarlos para extraer y clasificar su información. La galería administrativa ofrece vistas de lista y tarjetas para consultar la guía, coincidencia, estado y resultado de lectura OCR, y permite revisar, corregir, aprobar, rechazar o archivar documentos conservando su evidencia y bitácora.
+
+El enlace **Documentos** y la galería son solo para administradores. En el seguimiento de un viaje, el administrador puede subir a cualquier viaje y el operador solo a los suyos; este último ve únicamente estado y nota de revisión. Capturista y cliente no tienen acceso. El administrador que subió un archivo no puede revisarlo; otro administrador debe hacerlo. Aprobado y rechazado son estados finales.
+
+El escáner guía la captura en vivo y habilita el disparador solo tras tres mediciones estables de iluminación y enfoque; también analiza las fotos elegidas o tomadas con la cámara nativa y no las envía si no alcanzan los umbrales de legibilidad. La validación es una heurística local de brillo y nitidez, no una garantía de que todo el contenido del documento sea legible: revisa la vista previa y vuelve a tomar la foto si hace falta. La subida optimiza la foto en el navegador y responde sin esperar el OCR. Por defecto, se usa Claude si existe `ANTHROPIC_API_KEY`; de lo contrario, Tesseract con español se ejecuta en el servidor. Configura `OCR_MOTOR=tesseract` o `OCR_MOTOR=claude` para elegir explícitamente; el endpoint `/api/documentos/ocr-config` refleja esta selección en el aviso de privacidad. Las fotos se guardan fuera del proyecto en `UPLOAD_DIR` (por defecto, una carpeta temporal del sistema) o en un bucket privado con `ALMACEN=s3`; `S3_ENDPOINT` admite R2 y Backblaze B2. En Render, el disco local es efímero: usa un disco persistente o almacenamiento S3-compatible. Prueba guardar, leer y borrar con `cd Backend` y `pnpm probar:almacen`.
+
+Los documentos y sus fotos nunca se guardan en la caché local del navegador. La huella SHA-256 se verifica al abrir o reprocesar una imagen. Una imagen con la misma huella activa en el mismo viaje responde `409`; al archivar el registro se permite una nueva carga. Archivar no borra físicamente ni la foto ni el registro y requiere motivo; solo aplica a pendientes y rechazados. El administrador puede restaurar y cada acción queda en la bitácora. Las identificaciones no guardan ni muestran el texto OCR completo y su foto solo está disponible para administradores. La imagen se envía al proveedor externo únicamente cuando el motor configurado es Claude; Tesseract la procesa localmente. Ejecuta `pnpm migrar` para aplicar el esquema y purgar texto OCR de identificaciones históricas.
+
+**Diagnóstico seguro del almacén:** `cd Backend` y `pnpm auditar:documentos` compara `archivo_clave` de la base contra el almacén activo e imprime id, viaje, tipo, SHA-256 y existencia; por defecto es de solo lectura y no muestra texto OCR ni datos personales. Para archivar los faltantes elegibles, la opción explícita exige administrador, motivo y confirmación: `pnpm auditar:documentos -- --archivar-faltantes --confirmar "ARCHIVAR FALTANTES" --admin-id 3 --motivo "Archivo no localizado en el almacén"`. Los aprobados y estados no elegibles se conservan; no se elimina ningún archivo.
+
+**Almacén compartido para el equipo:** la base compartida con `ALMACEN=disco` no comparte los archivos entre computadoras; el directorio temporal predeterminado también puede cambiar o desaparecer al reiniciar o desplegar. Para pasar a S3/R2/B2, crea un bucket privado, configura `ALMACEN=s3`, `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT` (si aplica) y las credenciales `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` en cada instancia. Antes de cambiar el backend, copia los objetos desde la carpeta `UPLOAD_DIR` de la instancia que sí los conserva, preservando los nombres `archivo_clave`: `aws s3 sync "$UPLOAD_DIR" "s3://$S3_BUCKET" --endpoint-url "$S3_ENDPOINT"` (omite `--endpoint-url` para AWS S3). No hagas público el bucket. Verifica con `pnpm auditar:documentos` antes de retirar la copia local.
+
+**Probar el escáner con celular:** la cámara en vivo solo funciona en `https://` o `localhost`. Para una prueba temporal, inicia el backend en el puerto 3000 y crea un túnel HTTPS autorizado, por ejemplo `ngrok http 3000`; abre la URL HTTPS del túnel en el celular e inicia sesión. También puedes servir el sitio con un certificado HTTPS confiable. El botón **Elegir foto de galería** abre el selector de imágenes del dispositivo (sin forzar la cámara) y convierte el formato elegido a JPEG antes de subirlo. Si la medición local de luz o enfoque advierte baja legibilidad, el usuario puede elegir otra foto o confirmar que quiere continuar. No publiques el túnel ni compartas credenciales de prueba.
+
+Después de actualizar el código, ejecuta `pnpm migrar` desde `Backend/` para ampliar las tablas existentes.
+
 ## Funciones PWA
 
 | Función | Cómo funciona |
@@ -258,4 +289,4 @@ Roles: `admin`, `capturista`, `operador`, `cliente`. El frontend envía el token
 | Aviso de versión nueva | Al publicar cambios aparece «Hay una nueva versión · Actualizar»; la app se recarga solo cuando el usuario lo decide |
 | Notificaciones push | Web Push con claves VAPID (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` en `.env`; genéralas con `npx web-push generate-vapid-keys`). Avisan cuando un viaje se asigna, inicia, cambia de estado, llega al 90 % del recorrido («está por llegar») o se entrega. Llegan solo a los involucrados de cada viaje: quien lo creó, quien lo asignó, el chofer (y el chofer anterior si se reasigna) y el cliente de su QR (botón «Avísame» en `rastreo.html`, sin notas internas); quien hace el cambio no recibe su propio aviso. Al asignar, el panel ofrece «QR para el cliente». Botón «Activar avisos» en el encabezado. Requieren HTTPS o `localhost`; en iPhone, la app agregada a la pantalla de inicio |
 | Datos en vivo | Tablero, monitoreo y el seguimiento abierto se refrescan cada 10 s (se pausa si la pestaña no está visible) |
-| Cache API para la API | `api()` en `js/trazzo-core.js` pide siempre a la red; si responde bien guarda una copia en `caches.open('trazzo-api')`, y sin red devuelve esa copia. Se borra al cerrar sesión y el Service Worker no la elimina al cambiar de versión |
+| Cache API para la API | `api()` en `js/trazzo-core.js` pide siempre a la red y cachea las consultas permitidas; las peticiones de `/api/documentos` nunca se cachean y las fotos usan `no-store`. La caché se borra al cerrar sesión |
