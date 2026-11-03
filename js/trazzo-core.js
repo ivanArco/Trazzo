@@ -1214,16 +1214,30 @@
       return 'Posición aproximada según el avance del viaje · sin GPS del camión';
     }
 
+    function avisoMapaDetalle(texto) {
+      $('#dv-mapa-panel').hidden = false;
+      $('#dv-mapa').hidden = true;
+      $('#dv-mapa-fuente').textContent = texto;
+      $('#dv-mapa-fuente').classList.remove('dv-mapa__fuente--vivo');
+    }
+
     async function cargarMapaDetalle(v) {
       const panel = $('#dv-mapa-panel');
       let datos = null;
+      let sinRespuesta = false;
       // Sin Leaflet, sin permiso o con un viaje que aún no llega al servidor, la ventana sigue sin mapa
       if (window.L && usuarioActual()?.rol !== 'cliente') {
-        try { datos = await api(`/viajes/${v.id}/mapa`); } catch { /* sin datos del mapa */ }
+        try { datos = await api(`/viajes/${v.id}/mapa`); } catch { sinRespuesta = v.id > 0; }
       }
       if (viajeAbierto !== v.id) return;
-      panel.hidden = !datos?.trazo?.length;
-      if (panel.hidden) return;
+      if (!datos?.trazo?.length) {
+        if (viajeEnMapa === v.id) return; // ya hay un mapa a la vista: se conserva hasta la siguiente vuelta
+        if (datos || sinRespuesta) avisoMapaDetalle('No se pudo cargar el mapa: el servicio de rutas no responde. Se reintenta solo.');
+        else panel.hidden = true;
+        return;
+      }
+      panel.hidden = false;
+      $('#dv-mapa').hidden = false;
 
       if (!mapaDetalle) {
         mapaDetalle = L.map('dv-mapa', { zoomControl: true, scrollWheelZoom: false });
@@ -1268,7 +1282,10 @@
     async function abrirDetalle(id) {
       try {
         if (viajeAbierto !== id) $('#dv-rastreo').hidden = true;
-        if (viajeEnMapa !== id) $('#dv-mapa-panel').hidden = true; // no dejar a la vista el mapa del viaje anterior
+        if (viajeEnMapa !== id) { // no dejar a la vista el mapa del viaje anterior
+          if (id > 0 && window.L && usuarioActual()?.rol !== 'cliente') avisoMapaDetalle('Cargando el mapa…');
+          else $('#dv-mapa-panel').hidden = true;
+        }
         viajeAbierto = id;
         $('#dv-nota').value = '';
         const viaje = await api(`/viajes/${id}`);

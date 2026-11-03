@@ -46,7 +46,7 @@ async function pedirJson(url, opciones = {}) {
   for (let intento = 1; ; intento++) {
     let reintentable = true;
     try {
-      const respuesta = await fetch(url, { headers: { 'User-Agent': AGENTE }, signal: AbortSignal.timeout(12000), ...opciones });
+      const respuesta = await fetch(url, { headers: { 'User-Agent': AGENTE }, signal: AbortSignal.timeout(8000), ...opciones });
       if (respuesta.ok) return await respuesta.json();
       reintentable = respuesta.status === 429 || respuesta.status >= 500;
       throw new Error(`respondió ${respuesta.status}`);
@@ -196,7 +196,27 @@ export function calcularDuracionCamion(distanciaKm, datos = {}) {
   return calcularDuracion(distanciaKm, parametrosCamion(datos));
 }
 
-export async function estimar(datos = {}) {
+// Quien pide una ruta espera como máximo limiteMs para que el servidor siempre conteste. Si tarda más, el cálculo
+// sigue en segundo plano y deja el resultado en caché; las peticiones iguales comparten ese mismo cálculo.
+const calculosEnCurso = new Map();
+
+export async function estimar(datos = {}, limiteMs = 20000) {
+  const clave = JSON.stringify([datos.origen, datos.destino, datos.gps_origen, datos.gps_destino, datos.velocidad_promedio_kmh, datos.factor_restriccion]);
+  if (!calculosEnCurso.has(clave)) {
+    calculosEnCurso.set(clave, calcularRuta(datos).finally(() => calculosEnCurso.delete(clave)));
+  }
+  let temporizador;
+  const limite = new Promise((_, rechazar) => {
+    temporizador = setTimeout(() => rechazar(new HttpError(503, 'El servicio de mapas está tardando. Intenta en un momento.')), limiteMs);
+  });
+  try {
+    return await Promise.race([calculosEnCurso.get(clave), limite]);
+  } finally {
+    clearTimeout(temporizador);
+  }
+}
+
+async function calcularRuta(datos) {
   const { origen, destino, gps_origen, gps_destino } = datos;
   if (!origen?.trim() || !destino?.trim()) throw new HttpError(400, 'Escribe el origen y el destino');
   const parametros = parametrosCamion(datos);

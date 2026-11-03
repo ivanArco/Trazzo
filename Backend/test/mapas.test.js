@@ -57,6 +57,20 @@ test('si el servicio sigue fallando responde 503 y deja el motivo en el registro
   assert.match(registros.join(), /429/);
 });
 
+test('si el servicio no contesta, responde a tiempo y el cálculo sigue en segundo plano', async () => {
+  let soltar;
+  globalThis.fetch = (url) => new Promise((listo) => {
+    soltar = () => listo(json(String(url).includes('nominatim') ? LUGAR : RUTA));
+  });
+  const datos = direcciones();
+  await assert.rejects(estimar(datos, 1500), { status: 503 });
+
+  soltar();
+  conFallas([]);
+  const ruta = await estimar(datos);
+  assert.equal(ruta.distancia_km, 100);
+});
+
 test('un rechazo definitivo no se reintenta', async () => {
   conFallas([403]);
   await assert.rejects(estimar(direcciones()), { status: 503 });

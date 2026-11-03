@@ -1423,6 +1423,7 @@ body:has(.screen:target) .login {
 .dv-mapa { margin: 14px 0; }
 .dv-mapa[hidden] { display: none; }
 #dv-mapa { height: clamp(220px, 38vh, 340px); font: inherit; }
+#dv-mapa[hidden] { display: none; }
 .dv-mapa__fuente { margin: 8px 0 0; color: var(--muted); font-size: .82rem; }
 .dv-mapa__fuente--vivo { color: var(--go); font-weight: 600; }
 .dv-mapa__camion {
