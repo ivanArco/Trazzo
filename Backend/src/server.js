@@ -25,4 +25,4 @@ app.listen(PORT, async () => {
 });
 
 // Seguimiento de prueba: SIMULADOR_SEGUNDOS=0 en .env lo apaga
-iniciarSimulador(Number(process.env.SIMULADOR_SEGUNDOS ?? 10));
+iniciarSimulador(Number(process.env.SIMULADOR_SEGUNDOS ?? 2));

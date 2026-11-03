@@ -788,11 +788,15 @@
       redirigir();
       if (protegerSecciones()) cargarSeccion();
 
-      // Seguimiento en vivo: cada 10 s se refresca lo que se está viendo
+      // Seguimiento en vivo: cada 3 s se refresca lo que se está viendo (los viajes simulados duran segundos)
       setInterval(() => {
         if (document.hidden || !navigator.onLine || !usuarioActual()) return;
-        if (['#tablero', '#monitoreo', '#trafico'].includes(location.hash)) cargarSeccion({ silencioso: true });
+        if (['#tablero', '#monitoreo'].includes(location.hash)) cargarSeccion({ silencioso: true });
         if ($('#dlg-viaje').open) refrescarDetalle();
+      }, 3000);
+      // Tráfico gasta el cupo de TomTom: sigue cada 10 s
+      setInterval(() => {
+        if (!document.hidden && navigator.onLine && usuarioActual() && location.hash === '#trafico') cargarSeccion({ silencioso: true });
       }, 10000);
     }
 

@@ -110,10 +110,11 @@ routes → controllers → services → models → MySQL
 
 `Backend/test/rutas.test.js` comprueba que cada ruta exista y solo responda a los roles correctos (`pnpm test`, sin base de datos).
 
-### Velocidad de la simulación
+### Duración de la simulación
 
-Los viajes simulados avanzan 60 veces más rápido: cada hora de viaje tarda 1 minuto. Se cambia con `SIMULADOR_VELOCIDAD`
-(`1` = tiempo real). Un viaje asignado sigue esperando su hora de salida, salvo que se inicie a mano.
+Cada viaje asignado se inicia solo y se entrega a los 20 segundos, sin importar su distancia ni su hora de salida programada
+(`SIMULADOR_DURACION_SEG`). Según su id, algunos pasan por una situación que los pone «con retraso» un momento: tráfico, lluvia,
+falla mecánica, revisión o cliente no disponible. Con `SIMULADOR_SEGUNDOS=0` se apaga. Un viaje con GPS activo no se simula.
 
 ### Mapa en el seguimiento de un viaje
 
@@ -187,8 +188,7 @@ base se creó con `pnpm migrar -- --admin ... --demo`. Para levantar todo:
 > **Estas contraseñas son solo para la base local de desarrollo.** No las uses en la base de la nube ni en
 > producción: ahí crea el administrador con una contraseña propia (`pnpm migrar -- --admin ...`).
 
-Para probar el seguimiento con calma conviene `SIMULADOR_SEGUNDOS=60` en `Backend/.env` (con 10 s los viajes
-se entregan en unos 4 minutos; con 60 s, en unos 20-25).
+Para probar el seguimiento con más calma, sube `SIMULADOR_DURACION_SEG` en `Backend/.env` (por defecto, 20 segundos).
 
 ## Estructura
 
@@ -277,11 +277,9 @@ pendiente ──asignar──▶ asignado ──iniciar──▶ en_ruta ⇄ ret
 
 - Al asignar se valida que el operador no tenga otro viaje y que la unidad esté libre y soporte el peso.
 - Cada cambio queda en el historial (`eventos_viaje`) y alimenta la «Actividad reciente» del tablero.
-- **Seguimiento simulado (solo de prueba):** cada `SIMULADOR_SEGUNDOS` (10 por defecto) el servidor calcula el
-  avance según el tiempo transcurrido entre `salida` y `eta`; antes de la salida mantiene el viaje asignado,
-  al llegar la hora de salida lo pone en ruta y al alcanzar la ETA lo entrega. Los viajes activos con horario
-  vencido también se completan al iniciar el simulador. Si se comparte GPS reciente desde el teléfono, el reloj
-  simulado se pausa para ese viaje. Con `SIMULADOR_SEGUNDOS=0` se apaga.
+- **Seguimiento simulado (solo de prueba):** cada viaje asignado se inicia solo y se entrega a los 20 segundos
+  (`SIMULADOR_DURACION_SEG`); algunos pasan por una situación que los retrasa. Mientras el operador comparte su GPS,
+  el simulado se pausa para ese viaje. Con `SIMULADOR_SEGUNDOS=0` se apaga.
 
 **Mapa interactivo y ETA predictivo**
 
@@ -296,7 +294,7 @@ el ETA a medida que cambia el avance.
 
 El tablero incluye un mapa de unidades con rutas por carretera, progreso de cada viaje, ETA, filtro por ruta,
 capas independientes de rutas/unidades, zoom para encuadrar la flota y detalles al seleccionar un marcador.
-Se actualiza junto con el tablero cada 10 segundos. El operador asignado puede abrir el seguimiento de su viaje
+Se actualiza junto con el tablero cada 3 segundos. El operador asignado puede abrir el seguimiento de su viaje
 en el teléfono y tocar «Compartir ubicación de este teléfono»; el navegador pedirá permiso y enviará una
 posición cada 10 segundos mientras la app permanezca abierta. La ubicación se muestra en el mapa autenticado,
 actualiza el progreso/ETA y se borra al detener el GPS o entregar/cancelar el viaje. Solo se conserva la última
@@ -310,7 +308,7 @@ su uso; los trazos se guardan en caché en el backend.
 
 En el seguimiento de un viaje, «Compartir rastreo» crea un enlace secreto (token aleatorio de 256 bits) y su
 código QR, generado en el servidor. El cliente lo abre en su celular (`rastreo.html?t=...`) sin cuenta y ve el
-avance, el camión sobre el mapa, la hora de llegada y el historial, actualizado cada 15 s. La vista pública
+avance, el camión sobre el mapa, la hora de llegada y el historial, actualizado cada 3 s. La vista pública
 oculta datos internos (flete, placas, notas, nombres del personal) y el enlace se puede desactivar; caduca
 3 días después de la entrega.
 
@@ -436,5 +434,5 @@ Después de actualizar el código, ejecuta `pnpm migrar` desde `Backend/` para a
 | Sin conexión | El Service Worker guarda la interfaz; las últimas consultas a la API se guardan con la **Cache API** (caché `trazzo-api`) y se muestran sin red, con un aviso «Sin conexión» |
 | Aviso de versión nueva | Al publicar cambios aparece «Hay una nueva versión · Actualizar»; la app se recarga solo cuando el usuario lo decide |
 | Notificaciones push | Web Push con claves VAPID (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` en `.env`; genéralas con `npx web-push generate-vapid-keys`). Avisan cuando un viaje se asigna, inicia, cambia de estado, llega al 90 % del recorrido («está por llegar») o se entrega. Llegan solo a los involucrados de cada viaje: quien lo creó, quien lo asignó, el chofer (y el chofer anterior si se reasigna) y el cliente de su QR (botón «Avísame» en `rastreo.html`, sin notas internas); quien hace el cambio no recibe su propio aviso. Al asignar, el panel ofrece «QR para el cliente». Botón «Activar avisos» en el encabezado. Requieren HTTPS o `localhost`; en iPhone, la app agregada a la pantalla de inicio |
-| Datos en vivo | Tablero, monitoreo y el seguimiento abierto se refrescan cada 10 s (se pausa si la pestaña no está visible) |
+| Datos en vivo | Tablero, monitoreo y el seguimiento abierto se refrescan cada 3 s (se pausa si la pestaña no está visible) |
 | Cache API para la API | `api()` en `js/trazzo-core.js` pide siempre a la red y cachea las consultas permitidas; las peticiones de `/api/documentos` nunca se cachean y las fotos usan `no-store`. La caché se borra al cerrar sesión |

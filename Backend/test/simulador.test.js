@@ -1,76 +1,74 @@
-// Avance simulado de un viaje según su hora de inicio. No necesita base de datos.
+// Viajes simulados: duración fija y situaciones. No necesita base de datos.
 import { before, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.DB_HOST = '127.0.0.1';
 process.env.DB_PORT = '1';
 
-const HORA = 3_600_000;
 const ahora = Date.now();
 let calcular;
+let situacionDe;
+
+// Viaje iniciado hace `segundos`, en una simulación de 20 s
+const a = (id, segundos, datos = {}) => calcular({
+  id, estado: 'en_ruta', avance: 1, inicio_ms: ahora - segundos * 1000, ...datos
+}, ahora, 20);
 
 before(async () => {
-  ({ calcularProgresoProgramado: calcular } = await import('../src/services/viajes/simuladorService.js'));
+  ({ calcularProgreso: calcular, situacionDe } = await import('../src/services/viajes/simuladorService.js'));
 });
 
-test('un viaje asignado espera su hora de salida', () => {
-  assert.equal(calcular({ estado: 'asignado', salida_ms: ahora + 20 * HORA, duracion_min: 180, avance: 0 }, ahora, 1), null);
-});
-
-test('un viaje asignado inicia al llegar su hora de salida', () => {
-  const p = calcular({ estado: 'asignado', salida_ms: ahora - 0.5 * HORA, eta_ms: ahora + 2.5 * HORA, duracion_min: 180, avance: 0 }, ahora, 1);
+test('un viaje asignado se inicia solo, aunque su salida programada sea futura', () => {
+  const p = calcular({ id: 7, estado: 'asignado', avance: 0, salida_ms: ahora + 72_000_000 }, ahora, 20);
   assert.equal(p.iniciar, true);
-  assert.equal(p.avance, 16);
+  assert.equal(p.estado, 'en_ruta');
+  assert.equal(p.eta, ahora + 20_000);
 });
 
-test('iniciado a mano antes de su salida, avanza desde el inicio real', () => {
-  const p = calcular({
-    estado: 'en_ruta', salida_ms: ahora + 20 * HORA, inicio_ms: ahora - 1.5 * HORA, eta_ms: ahora + 1.5 * HORA, duracion_min: 180, avance: 1
-  }, ahora, 1);
-  assert.equal(p.avance, 50);
-  assert.equal(p.eta, ahora + 1.5 * HORA);
+test('todos los viajes terminan a los 20 segundos', () => {
+  for (let id = 1; id <= 14; id++) {
+    assert.equal(a(id, 19.9).entregado, false, `viaje ${id} antes de tiempo`);
+    assert.equal(a(id, 20).estado, 'entregado', `viaje ${id} a tiempo`);
+    assert.equal(a(id, 20).avance, 100);
+  }
 });
 
-test('recupera un viaje cuya llegada ya se había movido a su salida programada', () => {
-  const p = calcular({
-    estado: 'en_ruta', salida_ms: ahora + 20 * HORA, inicio_ms: ahora - 1.5 * HORA, eta_ms: ahora + 23 * HORA, duracion_min: 180, avance: 1
-  }, ahora, 1);
-  assert.equal(p.avance, 50);
-  assert.equal(p.eta, ahora + 1.5 * HORA);
+test('un viaje sin situación avanza parejo y sin retrasos', () => {
+  assert.equal(situacionDe(7), null);
+  assert.equal(a(7, 10).avance, 50);
+  for (let s = 0; s < 20; s++) assert.equal(a(7, s).estado, 'en_ruta');
 });
 
-test('iniciado a mano llega y se entrega aunque su salida programada no haya pasado', () => {
-  const p = calcular({
-    estado: 'en_ruta', salida_ms: ahora + 20 * HORA, inicio_ms: ahora - 4 * HORA, eta_ms: ahora - HORA, duracion_min: 180, avance: 90
-  }, ahora, 1);
-  assert.equal(p.entregado, true);
-  assert.equal(p.avance, 100);
+test('un viaje con situación se detiene y después recupera lo perdido', () => {
+  const situacion = situacionDe(1);
+  assert.ok(situacion);
+  assert.equal(a(1, 4).estado, 'en_ruta');
+  const detenido = a(1, 8);
+  assert.equal(detenido.estado, 'retraso');
+  assert.equal(detenido.situacion.texto, situacion.texto);
+  assert.equal(detenido.avance, 25);
+  assert.equal(a(1, 9.9).avance, 25);
+  assert.equal(a(1, 11).estado, 'en_ruta');
+  assert.ok(a(1, 15).avance > 25);
 });
 
-test('un viaje que salió a su hora no cambia', () => {
-  const p = calcular({
-    estado: 'en_ruta', salida_ms: ahora - HORA, inicio_ms: ahora - HORA, eta_ms: ahora + HORA, duracion_min: 120, avance: 10
-  }, ahora, 1);
-  assert.equal(p.avance, 50);
-  assert.equal(p.eta, ahora + HORA);
+test('hay viajes con y sin situación, y con situaciones distintas', () => {
+  const textos = Array.from({ length: 7 }, (_, id) => situacionDe(id)?.texto);
+  assert.ok(textos.includes(undefined));
+  assert.ok(new Set(textos.filter(Boolean)).size >= 4);
 });
 
-test('a velocidad 60, cada hora de viaje tarda 1 minuto', () => {
-  const minuto = 60_000;
-  const p = calcular({
-    estado: 'en_ruta', salida_ms: ahora + 20 * HORA, inicio_ms: ahora - 15 * minuto, eta_ms: ahora + 30 * HORA, duracion_min: 1800, avance: 1
-  }, ahora, 60);
-  assert.equal(p.avance, 50);
-  assert.equal(p.eta, ahora + 15 * minuto);
+test('el avance nunca retrocede', () => {
+  for (let id = 0; id < 7; id++) {
+    let anterior = 0;
+    for (let s = 0; s < 20; s += 0.5) {
+      const { avance } = a(id, s, { avance: anterior });
+      assert.ok(avance >= anterior, `viaje ${id} en ${s} s`);
+      anterior = avance;
+    }
+  }
 });
 
-test('a velocidad 60, un viaje que ya cumplió su tiempo simulado se entrega', () => {
-  const p = calcular({
-    estado: 'en_ruta', salida_ms: ahora + 20 * HORA, inicio_ms: ahora - 6 * 60_000, eta_ms: ahora + 4 * HORA, duracion_min: 300, avance: 1
-  }, ahora, 60);
-  assert.equal(p.entregado, true);
-});
-
-test('la hora de salida programada se sigue respetando a cualquier velocidad', () => {
-  assert.equal(calcular({ estado: 'asignado', salida_ms: ahora + 20 * HORA, duracion_min: 180, avance: 0 }, ahora, 60), null);
+test('un viaje en curso anterior a la simulación se da por terminado', () => {
+  assert.equal(calcular({ id: 3, estado: 'en_ruta', avance: 40 }, ahora, 20).estado, 'entregado');
 });
