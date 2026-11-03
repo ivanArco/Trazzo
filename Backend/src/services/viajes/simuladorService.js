@@ -6,9 +6,11 @@ import * as flotaModel from '../../models/flotaModel.js';
 import { avisarViaje, CERCA_DEL_DESTINO } from '../notificacionService.js';
 
 const MILISEGUNDOS_POR_MINUTO = 60_000;
+// Es una simulación: con 60, cada hora de viaje tarda 1 minuto. Con 1 tarda el tiempo real.
+const VELOCIDAD = Number(process.env.SIMULADOR_VELOCIDAD) || 60;
 const MINUTOS_POR_PUNTO = 3;
 
-export function calcularProgresoProgramado(viaje, ahora = Date.now()) {
+export function calcularProgresoProgramado(viaje, ahora = Date.now(), velocidad = VELOCIDAD) {
   const salida = Number(viaje.salida_ms);
   if (!Number.isFinite(salida)) return null;
   if (viaje.estado === 'asignado' && ahora < salida) return null;
@@ -19,15 +21,15 @@ export function calcularProgresoProgramado(viaje, ahora = Date.now()) {
     : 100 * MINUTOS_POR_PUNTO;
   const etaGuardada = Number(viaje.eta_ms);
   const inicioReal = Number(viaje.inicio_ms);
-  const duracionMs = duracionMinutos * MILISEGUNDOS_POR_MINUTO;
+  const duracionMs = duracionMinutos * MILISEGUNDOS_POR_MINUTO / velocidad;
 
   // Si se inició a mano antes de su salida programada, el tiempo corre desde ese momento
   const adelantado = viaje.estado !== 'asignado' && Number.isFinite(inicioReal) && inicioReal < salida;
   const inicio = adelantado ? inicioReal : salida;
   const etaPrevista = inicio + duracionMs;
-  const eta = adelantado
-    ? Math.min(Number.isFinite(etaGuardada) && etaGuardada > inicio ? etaGuardada : etaPrevista, etaPrevista)
-    : Number.isFinite(etaGuardada) && etaGuardada > salida ? etaGuardada : etaPrevista;
+  const etaValida = Number.isFinite(etaGuardada) && etaGuardada > inicio;
+  const eta = !etaValida ? etaPrevista
+    : adelantado || velocidad > 1 ? Math.min(etaGuardada, etaPrevista) : etaGuardada;
   const porcentajeTiempo = Math.max(0, Math.min(1, (ahora - inicio) / (eta - inicio)));
   const avanceCalculado = Math.floor(porcentajeTiempo * 100);
   const avance = Math.max(Number(viaje.avance) || 0, avanceCalculado);

@@ -110,6 +110,11 @@ routes → controllers → services → models → MySQL
 
 `Backend/test/rutas.test.js` comprueba que cada ruta exista y solo responda a los roles correctos (`pnpm test`, sin base de datos).
 
+### Velocidad de la simulación
+
+Los viajes simulados avanzan 60 veces más rápido: cada hora de viaje tarda 1 minuto. Se cambia con `SIMULADOR_VELOCIDAD`
+(`1` = tiempo real). Un viaje asignado sigue esperando su hora de salida, salvo que se inicie a mano.
+
 ### Mapa en el seguimiento de un viaje
 
 La ventana «Seguimiento» (Monitoreo, Historial o el mapa del Tablero) muestra la ruta del viaje y el camión, con GPS en vivo

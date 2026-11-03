@@ -665,6 +665,12 @@
 
       // Oculta enlaces y botones que no corresponden al rol
       $$('[data-rol]').forEach((n) => { n.hidden = !permitidoPara(n, usuario?.rol); });
+      // La configuración de OCR requiere sesión: se consulta al entrar, no al cargar la página
+      if (['admin', 'operador'].includes(usuario?.rol)) {
+        cargarAvisoPrivacidadOcr().catch((error) => {
+          $('#doc-aviso-privacidad').textContent = `No se pudo consultar la configuración OCR: ${error.message}`;
+        });
+      }
       if (usuario?.rol === 'admin') {
         cargarConteoDocumentos().catch((error) => mostrarAviso(error.message));
       } else {
@@ -3408,9 +3414,6 @@
         documentoActual = null;
         valoresInicialesDocumento = '';
         $('#doc-bitacora').replaceChildren(el('li', {}, el('small', { text: 'Selecciona Actualizar para consultar la bitácora.' })));
-      });
-      cargarAvisoPrivacidadOcr().catch((error) => {
-        $('#doc-aviso-privacidad').textContent = `No se pudo consultar la configuración OCR: ${error.message}`;
       });
     }
 

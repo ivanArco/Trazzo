@@ -36,10 +36,28 @@ const turnoNominatim = () => {
   return turno;
 };
 
+// Nominatim y OSRM son servidores públicos gratuitos y a veces fallan un momento: se reintenta con una pausa.
+// Lo que no se resuelve al reintentar (un 403, por ejemplo) se deja en el registro para poder diagnosticarlo.
+const INTENTOS = 3;
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function pedirJson(url, opciones = {}) {
-  const respuesta = await fetch(url, { headers: { 'User-Agent': AGENTE }, signal: AbortSignal.timeout(10000), ...opciones });
-  if (!respuesta.ok) throw new Error(`Servicio de mapas respondió ${respuesta.status}`);
-  return respuesta.json();
+  const { hostname } = new URL(url);
+  for (let intento = 1; ; intento++) {
+    let reintentable = true;
+    try {
+      const respuesta = await fetch(url, { headers: { 'User-Agent': AGENTE }, signal: AbortSignal.timeout(12000), ...opciones });
+      if (respuesta.ok) return await respuesta.json();
+      reintentable = respuesta.status === 429 || respuesta.status >= 500;
+      throw new Error(`respondió ${respuesta.status}`);
+    } catch (error) {
+      if (!reintentable || intento === INTENTOS) {
+        console.error(`Servicio de mapas ${hostname}: ${error.message} (intento ${intento})`);
+        throw error;
+      }
+    }
+    await esperar(intento * 1000);
+  }
 }
 
 // Coordenadas dentro de un enlace de mapas: ...@19.04,-98.20... o ...?q=19.04,-98.20
