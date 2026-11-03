@@ -89,6 +89,15 @@ pueden ir como `\n`). Después corre `pnpm migrar` una vez para crear o actualiz
 > La app móvil **nunca** se conecta a MySQL: habla con esta API. La contraseña de la base solo vive en el `.env`
 > del backend.
 
+### Trabajo sin conexión
+
+- **Consultar:** las consultas se guardan en la Cache API y, al iniciar sesión o volver la señal, se precarga lo
+  principal. Sin red se muestra la última copia, con los cambios pendientes ya aplicados.
+- **Guardar:** registrar o asignar viajes, cambiar su estado y agregar o editar unidades se guarda en IndexedDB y se
+  envía en orden al volver la conexión. Si el servidor rechaza un cambio, queda en «Ver» para reintentarlo o descartarlo.
+- **Requieren conexión:** primer acceso, usuarios, documentos y OCR, QR, tráfico no visitado y atención de alertas de pánico.
+- **Sincronización:** ocurre con la app abierta, y la hora registrada en el servidor es la del envío.
+
 ### Notificaciones push
 
 Avisos del sistema operativo que llegan aunque Trazzo esté cerrada (estándar Web Push con claves VAPID).

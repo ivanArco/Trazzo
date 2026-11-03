@@ -120,6 +120,11 @@ export const tokenDeRastreo = async (id) => {
   return rows[0]?.rastreo_token;
 };
 
+export const buscarPorClaveCliente = async (clave, usuarioId) => {
+  const [rows] = await pool.query(`${SELECT_VIAJE} WHERE v.clave_cliente = ? AND v.creado_por = ?`, [clave, usuarioId]);
+  return rows[0];
+};
+
 export const buscarPorId = async (id, conexion = pool) => {
   const [rows] = await conexion.query(`${SELECT_VIAJE} WHERE v.id = ?`, [id]);
   return rows[0];
@@ -146,10 +151,10 @@ export const borrarUbicacion = async (id, conexion = pool) => {
 export const crear = async (datos, conexion = pool) => {
   const [r] = await conexion.execute(
     `INSERT INTO viajes (origen, destino, gps_origen, gps_destino, mercancia, peso_kg, num_unidades, flete, cliente, salida,
-                         distancia_km, duracion_min, creado_por)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         distancia_km, duracion_min, creado_por, clave_cliente)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [datos.origen, datos.destino, datos.gps_origen, datos.gps_destino, datos.mercancia, datos.peso_kg,
-      datos.num_unidades, datos.flete, datos.cliente, datos.salida, datos.distancia_km, datos.duracion_min, datos.creado_por]
+      datos.num_unidades, datos.flete, datos.cliente, datos.salida, datos.distancia_km, datos.duracion_min, datos.creado_por, datos.clave_cliente ?? null]
   );
   await conexion.execute("UPDATE viajes SET folio = CONCAT('TRZ-', LPAD(id, 4, '0')) WHERE id = ?", [r.insertId]);
   return r.insertId;

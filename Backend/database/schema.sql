@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS viajes (
   gps_longitud DECIMAL(10, 7) NULL,
   gps_precision_m DECIMAL(8, 2) NULL,
   gps_actualizado_en DATETIME NULL,
+  clave_cliente VARCHAR(40) NULL UNIQUE,      -- evita duplicar un viaje reenviado desde la cola sin conexión
   PRIMARY KEY (id),
   UNIQUE KEY folio (folio),
   UNIQUE KEY rastreo_token (rastreo_token),

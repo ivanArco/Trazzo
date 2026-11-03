@@ -156,6 +156,18 @@
     <div class="actions"><button type="button" class="btn btn--ghost" id="dv-cerrar">Cerrar</button></div>
   </dialog>
 
-  <div class="banda banda--offline" id="aviso-offline" role="status" hidden>Sin conexión · se muestran los últimos datos guardados</div>
+  <!-- ===================== CAMBIOS SIN CONEXIÓN ===================== -->
+  <dialog class="dialog" id="dlg-cola" aria-labelledby="t-dlg-cola">
+    <div class="form">
+      <h2 id="t-dlg-cola">Cambios guardados en este equipo</h2>
+      <p class="muted">Se envían solos, en este orden, cuando vuelve la conexión.</p>
+      <ul class="cola" id="cola-lista"></ul>
+      <div class="dialog__acciones">
+        <button type="button" class="btn btn--ghost" id="cola-cerrar">Cerrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="banda banda--offline" id="aviso-offline" role="status" hidden><span id="aviso-offline-texto">Sin conexión · se muestran los últimos datos guardados</span> <button type="button" class="btn btn--ghost btn--sm" id="btn-cola" hidden>Ver</button></div>
   <div class="banda banda--version" id="aviso-version" role="status" hidden>Hay una nueva versión de Trazzo <button type="button" class="btn btn--accent btn--sm" id="btn-actualizar">Actualizar</button></div>
   

@@ -214,7 +214,9 @@ export const crear = async (datos = {}, usuario) => {
     flete: numero(datos.flete ?? 0),
     cliente: datos.cliente?.trim(),
     salida: new Date(datos.salida),
-    creado_por: usuario.id
+    creado_por: usuario.id,
+    // La app la genera para cada viaje: si se perdió la respuesta y lo reenvía, no se registra dos veces
+    clave_cliente: /^[\w-]{8,40}$/.test(datos.clave_cliente || '') ? datos.clave_cliente : null
   };
 
   if (!viaje.origen || !viaje.destino || !viaje.mercancia || !viaje.cliente || !datos.salida) {
@@ -228,6 +230,11 @@ export const crear = async (datos = {}, usuario) => {
     if (viaje[campo] && !esUrl(viaje[campo])) throw new HttpError(400, 'Los enlaces GPS deben empezar con https://');
   }
 
+  if (viaje.clave_cliente) {
+    const existente = await viajeModel.buscarPorClaveCliente(viaje.clave_cliente, usuario.id);
+    if (existente) return existente;
+  }
+
   // Distancia y tiempo reales por carretera; si el servicio de mapas falla, el viaje se guarda igual
   try {
     const ruta = await estimar(viaje);
@@ -238,11 +245,20 @@ export const crear = async (datos = {}, usuario) => {
     viaje.duracion_min = null;
   }
 
-  const id = await enTransaccion(async (conexion) => {
-    const nuevoId = await viajeModel.crear(viaje, conexion);
-    await viajeModel.registrarEvento(nuevoId, 'creado', `Registrado por ${usuario.nombre}`, usuario.id, conexion);
-    return nuevoId;
-  });
+  let id;
+  try {
+    id = await enTransaccion(async (conexion) => {
+      const nuevoId = await viajeModel.crear(viaje, conexion);
+      await viajeModel.registrarEvento(nuevoId, 'creado', `Registrado por ${usuario.nombre}`, usuario.id, conexion);
+      return nuevoId;
+    });
+  } catch (error) {
+    // Dos envíos simultáneos del mismo viaje: el segundo devuelve el que ya quedó
+    const existente = error.code === 'ER_DUP_ENTRY' && viaje.clave_cliente
+      && await viajeModel.buscarPorClaveCliente(viaje.clave_cliente, usuario.id);
+    if (existente) return existente;
+    throw error;
+  }
   return await viajeModel.buscarPorId(id);
 };
 

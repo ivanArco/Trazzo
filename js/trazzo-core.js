@@ -308,13 +308,314 @@
       }
     };
 
+    /* ---------- Cambios sin conexión ---------- */
+    // Lo que se hace sin señal se guarda en IndexedDB y se envía, en el mismo orden, al volver la conexión.
+    // Solo se guardan los cambios de operaciones_sin_conexion: nunca contraseñas ni archivos. Lo que necesita al
+    // servidor para responder (acceso, usuarios, documentos, QR, pánico) sigue pidiendo conexión.
+    const ID_LOCAL = /\/-\d+(\/|$)/; // los registros creados sin señal llevan un id negativo hasta que llegan al servidor
+    const operacionesSinConexion = [
+      ['POST', /^\/viajes$/],
+      ['PATCH', /^\/viajes\/-?\d+\/(estado|asignar)$/],
+      ['POST', /^\/flota\/unidades$/],
+      ['PATCH', /^\/flota\/unidades\/-?\d+$/]
+    ];
+    const seGuardaSinConexion = (ruta, method) => operacionesSinConexion.some(([m, patron]) => m === method && patron.test(ruta));
+    const nuevaClave = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+
+    let cambiosPorEnviar = 0;
+    let cambiosFallidos = 0;
+
+    const colaOffline = {
+      abrir() {
+        this.bd ??= new Promise((listo, fallo) => {
+          const peticion = indexedDB.open('trazzo-offline', 1);
+          peticion.onupgradeneeded = () => peticion.result.createObjectStore('cambios', { keyPath: 'id', autoIncrement: true });
+          peticion.onsuccess = () => listo(peticion.result);
+          peticion.onerror = () => fallo(peticion.error);
+        });
+        return this.bd;
+      },
+      async operar(modo, trabajo) {
+        const bd = await this.abrir();
+        return new Promise((listo, fallo) => {
+          const transaccion = bd.transaction('cambios', modo);
+          const peticion = trabajo(transaccion.objectStore('cambios'));
+          transaccion.oncomplete = () => listo(peticion.result);
+          transaccion.onerror = transaccion.onabort = () => fallo(transaccion.error);
+        });
+      },
+      // Cada persona ve y envía solo sus cambios, aunque compartan el equipo
+      async todos() {
+        const usuario = usuarioActual();
+        if (!usuario) return [];
+        return (await this.operar('readonly', (s) => s.getAll())).filter((c) => c.usuario_id === usuario.id);
+      },
+      guardar(cambio) { return this.operar('readwrite', (s) => s.put(cambio)); },
+      borrar(id) { return this.operar('readwrite', (s) => s.delete(id)); }
+    };
+
+    const leCorresponde = (cambio, base, id) => `${cambio.ruta}/`.startsWith(`${base}/${id}/`);
+
+    // Copia guardada + los cambios que aún no se envían: así la pantalla ya muestra lo que hizo la persona
+    async function conCambios(ruta, datos) {
+      const cambios = (await colaOffline.todos().catch(() => [])).filter((c) => !c.error);
+      if (!cambios.length) return datos;
+      const [camino, consulta] = ruta.split('?');
+      const aplicar = (registro, base) => cambios.reduce(
+        (actual, c) => (!c.idLocal && leCorresponde(c, base, actual.id) ? { ...actual, ...c.local } : actual), registro);
+      const nuevos = (base) => cambios.filter((c) => c.idLocal && c.ruta === base).map((c) => c.local);
+
+      if (camino === '/viajes') {
+        const estados = new URLSearchParams(consulta).get('estado')?.split(',');
+        return [...nuevos('/viajes').map((v) => aplicar(v, '/viajes')), ...datos.map((v) => aplicar(v, '/viajes'))]
+          .filter((v) => !estados || estados.includes(v.estado));
+      }
+      if (camino === '/viajes/historial') return { ...datos, viajes: datos.viajes.map((v) => aplicar(v, '/viajes')) };
+      if (/^\/viajes\/-?\d+$/.test(camino)) return aplicar(datos, '/viajes');
+      if (camino === '/flota/unidades') return [...nuevos(camino), ...datos].map((u) => aplicar(u, camino));
+      return datos;
+    }
+
+    // Sin red: la copia guardada de esa consulta o, si nunca se abrió, lo que se pueda armar con la lista de viajes
+    async function leerSinConexion(ruta) {
+      const guardado = await cacheApi.leer(ruta);
+      if (guardado) return conCambios(ruta, guardado);
+
+      const lista = /^\/viajes(\?estado=|$)/.test(ruta) || /^\/viajes\/-?\d+$/.test(ruta)
+        ? await cacheApi.leer('/viajes') : null;
+      const [camino] = ruta.split('?');
+      if (camino === '/viajes') return lista ? conCambios(ruta, lista) : null;
+
+      const viajeId = camino.match(/^\/viajes\/(-?\d+)$/)?.[1];
+      if (!viajeId) return null;
+      const viaje = (await conCambios('/viajes', lista || [])).find((v) => String(v.id) === viajeId);
+      return viaje ? { ...viaje, eventos: [] } : null;
+    }
+
+    // Arma el resultado que la pantalla espera del servidor y lo que hay que aplicar a las copias guardadas
+    async function prepararCambio(ruta, method, body) {
+      const ahora = new Date().toISOString();
+      if (ruta === '/viajes') {
+        const id = -Date.now();
+        const local = {
+          ...body, id, idLocal: true, folio: 'Por enviar', estado: 'pendiente', avance: 0, eta: null,
+          peso_kg: Number(body.peso_kg), num_unidades: Number(body.num_unidades ?? 1), flete: Number(body.flete ?? 0),
+          distancia_km: null, duracion_min: null, operador_id: null, operador: null, unidad_id: null, placas: null,
+          marca_modelo: null, capturo: usuarioActual().nombre, creado_en: ahora, entregado_en: null, rastreo_activo: 0
+        };
+        return { local, idLocal: id, resultado: local, texto: `Registrar el viaje ${ciudad(body.origen)} → ${ciudad(body.destino)}` };
+      }
+      if (ruta === '/flota/unidades') {
+        const id = -Date.now();
+        const local = { ...body, id, estado: 'disponible', viaje_activo: null };
+        return { local, idLocal: id, resultado: local, texto: `Agregar la unidad ${body.placas}` };
+      }
+      if (ruta.startsWith('/flota/unidades/')) {
+        const unidades = await leerSinConexion('/flota/unidades');
+        const actual = unidades?.find((u) => ruta.endsWith(`/${u.id}`));
+        return { local: body, resultado: { ...actual, ...body }, texto: `Actualizar la unidad ${body.placas || actual?.placas || ''}`.trim() };
+      }
+
+      const [, viajeId, accion] = ruta.match(/^\/viajes\/(-?\d+)\/(estado|asignar)$/);
+      const viaje = await leerSinConexion(`/viajes/${viajeId}`);
+      if (accion === 'estado') {
+        const local = { estado: body.estado, ...(body.estado === 'entregado' && { avance: 100, entregado_en: ahora }) };
+        return { local, resultado: { ...viaje, ...local }, texto: `${viaje?.folio || 'Viaje'}: ${ESTADOS[body.estado]?.texto.toLowerCase() || body.estado}` };
+      }
+      const [operadores, unidades] = await Promise.all([cacheApi.leer('/flota/operadores'), cacheApi.leer('/flota/unidades')]);
+      const unidad = unidades?.find((u) => u.id === body.unidad_id);
+      const local = {
+        estado: 'asignado', operador_id: body.operador_id, unidad_id: body.unidad_id,
+        operador: operadores?.find((o) => o.id === body.operador_id)?.nombre || 'Operador',
+        placas: unidad?.placas || '—', marca_modelo: unidad?.marca_modelo || null
+      };
+      return { local, resultado: { ...viaje, ...local }, texto: `${viaje?.folio || 'Viaje'}: asignar a ${local.operador}` };
+    }
+
+    async function guardarCambio(ruta, method, body) {
+      try {
+        const { resultado, ...cambio } = await prepararCambio(ruta, method, body);
+        await colaOffline.guardar({ ...cambio, usuario_id: usuarioActual().id, ruta, method, body, creado_en: Date.now() });
+        await pintarCola();
+        return { ...resultado, pendiente_de_enviar: true };
+      } catch {
+        throw new Error('Sin conexión y este navegador no permite guardar el cambio. Inténtalo cuando vuelva la señal.');
+      }
+    }
+
+    // Envía los cambios en orden. Si se va la señal se detiene y conserva el resto; si el servidor rechaza uno,
+    // lo marca para que la persona decida, sin perderlo y sin enviar lo que dependía de él.
+    async function enviarCola() {
+      let enviados = 0;
+      let rechazados = 0;
+      for (;;) {
+        const cambios = await colaOffline.todos();
+        const cambio = cambios.find((c) => !c.error);
+        const token = sesion.leer()?.token;
+        if (!cambio || !token) break;
+
+        let respuesta;
+        try {
+          respuesta = await fetch(API_URL + cambio.ruta, {
+            method: cambio.method,
+            cache: 'no-store',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(cambio.body)
+          });
+        } catch { break; }
+
+        const datos = await respuesta.json().catch(() => ({}));
+        if (respuesta.status === 401) {
+          cerrarSesion();
+          mostrarAviso('Tu sesión expiró. Entra de nuevo y tus cambios guardados se enviarán.');
+          return;
+        }
+        if (respuesta.status >= 500 || respuesta.status === 429) break; // falla temporal: se reintenta después
+
+        if (respuesta.ok || await yaSeAplico(cambio, respuesta.status, token)) {
+          await colaOffline.borrar(cambio.id);
+          enviados++;
+          if (cambio.idLocal && respuesta.ok) {
+            // Lo que se hizo después con ese registro ya puede usar el id que le dio el servidor
+            await Promise.all(cambios.filter((c) => c.id !== cambio.id && ID_LOCAL.test(c.ruta)
+              && c.ruta.includes(`/${cambio.idLocal}`)).map((c) => colaOffline.guardar({
+              ...c, ruta: c.ruta.replace(`/${cambio.idLocal}`, `/${datos.id}`)
+            })));
+          }
+          continue;
+        }
+
+        const motivo = datos.message || `Error ${respuesta.status}`;
+        await colaOffline.guardar({ ...cambio, error: motivo });
+        rechazados++;
+        if (cambio.idLocal) {
+          await Promise.all(cambios.filter((c) => c.ruta.includes(`/${cambio.idLocal}`)).map((c) => colaOffline.guardar({
+            ...c, error: 'Depende de un registro que no se pudo guardar'
+          })));
+        }
+      }
+      await pintarCola();
+      if (enviados || rechazados) {
+        const partes = [];
+        if (enviados) partes.push(`${enviados} ${enviados === 1 ? 'cambio enviado' : 'cambios enviados'}`);
+        if (rechazados) partes.push(`${rechazados} sin aplicar`);
+        mostrarAviso(`Sincronizado: ${partes.join(' · ')}.`);
+      }
+      if (enviados) {
+        await cargarSeccion({ silencioso: true });
+        if ($('#dlg-viaje').open) refrescarDetalle();
+        precargarDatos();
+      }
+    }
+
+    // Si se perdió la respuesta, el servidor pudo haber aplicado ya el cambio de estado: no es un rechazo
+    async function yaSeAplico(cambio, status, token) {
+      if (status !== 409 || !cambio.ruta.endsWith('/estado')) return false;
+      try {
+        const respuesta = await fetch(API_URL + cambio.ruta.replace(/\/estado$/, ''), {
+          cache: 'no-store', headers: { Authorization: `Bearer ${token}` }
+        });
+        return respuesta.ok && (await respuesta.json()).estado === cambio.body.estado;
+      } catch { return false; }
+    }
+
+    let sincronizando = false;
+    async function sincronizarCola() {
+      if (sincronizando || !usuarioActual()) return;
+      sincronizando = true;
+      try {
+        // Con varias pestañas abiertas, solo una envía a la vez
+        await (navigator.locks ? navigator.locks.request('trazzo-cola', enviarCola) : enviarCola());
+      } catch { /* almacenamiento bloqueado: se reintenta en la siguiente vuelta */ }
+      finally { sincronizando = false; }
+    }
+
+    // Guarda en la caché lo principal para poder abrir esas secciones sin señal aunque no se hayan visitado.
+    // Tráfico no se incluye porque cada consulta gasta el cupo de TomTom.
+    function precargarDatos() {
+      const usuario = usuarioActual();
+      if (!usuario || !navigator.onLine) return;
+      const rutas = ['/viajes', '/viajes/resumen', '/viajes/eventos', '/viajes/mapa'];
+      const historial = consultaHistorial();
+      historial.set('pagina', 1);
+      historial.set('por_pagina', POR_PAGINA_HISTORIAL);
+      rutas.push(`/viajes/historial?${historial}`);
+      if (esOficina()) rutas.push('/viajes?estado=pendiente', '/flota/operadores', '/flota/unidades');
+      if (usuario.rol === 'admin') rutas.push('/users');
+      Promise.allSettled(rutas.map((ruta) => api(ruta)));
+    }
+
+    const plural = (n, una, varias) => `${n} ${n === 1 ? una : varias}`;
+
+    async function pintarCola() {
+      const cambios = await colaOffline.todos().catch(() => []);
+      cambiosPorEnviar = cambios.filter((c) => !c.error).length;
+      cambiosFallidos = cambios.length - cambiosPorEnviar;
+
+      const partes = [];
+      if (!navigator.onLine) partes.push('Sin conexión · se muestran los últimos datos guardados');
+      if (cambiosPorEnviar) partes.push(`${plural(cambiosPorEnviar, 'cambio', 'cambios')} por enviar`);
+      if (cambiosFallidos) partes.push(`${plural(cambiosFallidos, 'cambio', 'cambios')} sin aplicar`);
+      $('#aviso-offline-texto').textContent = partes.join(' · ');
+      $('#aviso-offline').hidden = !partes.length;
+      $('#btn-cola').hidden = !cambios.length;
+
+      const lista = $('#cola-lista');
+      lista.replaceChildren(...cambios.map((c) => el('li', { class: 'cola__item' },
+        el('div', {},
+          el('b', { text: c.texto }),
+          el('small', { class: c.error ? 'es-error' : 'muted', text: c.error || `Guardado ${fmtHora.format(new Date(c.creado_en))} · por enviar` })),
+        el('div', { class: 'cola__botones' },
+          c.error ? el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => reintentarCambio(c), text: 'Reintentar' }) : '',
+          el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => descartarCambio(c, cambios), text: 'Descartar' })))));
+      if (!cambios.length && $('#dlg-cola').open) $('#dlg-cola').close();
+    }
+
+    async function reintentarCambio(cambio) {
+      const { error, ...limpio } = cambio;
+      await colaOffline.guardar(limpio);
+      await pintarCola();
+      sincronizarCola();
+    }
+
+    async function descartarCambio(cambio, cambios) {
+      const dependientes = cambio.idLocal ? cambios.filter((c) => c.id !== cambio.id && c.ruta.includes(`/${cambio.idLocal}`)) : [];
+      const extra = dependientes.length ? ` También se descartarán ${plural(dependientes.length, 'cambio', 'cambios')} que dependen de él.` : '';
+      if (!confirm(`¿Descartar «${cambio.texto}»? No se enviará al servidor.${extra}`)) return;
+      await Promise.all([cambio, ...dependientes].map((c) => colaOffline.borrar(c.id)));
+      await pintarCola();
+      cargarSeccion({ silencioso: true });
+    }
+
+    function iniciarCola() {
+      $('#btn-cola').addEventListener('click', () => $('#dlg-cola').showModal());
+      $('#cola-cerrar').addEventListener('click', () => $('#dlg-cola').close());
+      window.addEventListener('offline', pintarCola);
+      window.addEventListener('online', () => {
+        pintarCola();
+        sincronizarCola();
+        precargarDatos();
+      });
+      // navigator.onLine no detecta todo (wifi sin internet, servidor apagado): con pendientes se reintenta
+      setInterval(() => {
+        if (cambiosPorEnviar && navigator.onLine && !document.hidden) sincronizarCola();
+      }, 30000);
+      pintarCola().then(sincronizarCola);
+      precargarDatos();
+    }
+
     // fetch con el token y manejo de errores; lanza Error con el mensaje del servidor
     async function api(ruta, { method = 'GET', body } = {}) {
       const token = sesion.leer()?.token;
       const esDocumento = ruta.startsWith('/documentos');
-      const cacheable = method === 'GET' && !esDocumento && !ruta.startsWith('/viajes/mapa');
+      const cacheable = method === 'GET' && !esDocumento;
+      const guardable = Boolean(token) && seGuardaSinConexion(ruta, method);
+      // La clave evita un viaje duplicado si se pierde la respuesta y el registro se vuelve a enviar
+      if (method === 'POST' && ruta === '/viajes') body = { clave_cliente: nuevaClave(), ...body };
       let respuesta;
       try {
+        // Un registro creado sin señal solo existe aquí, y un cambio nuevo espera su turno detrás de los anteriores
+        if (ID_LOCAL.test(ruta) || (guardable && cambiosPorEnviar)) throw new Error('Pendiente de enviar');
         respuesta = await fetch(API_URL + ruta, {
           method,
           cache: esDocumento ? 'no-store' : 'default',
@@ -325,12 +626,15 @@
           body: body && JSON.stringify(body)
         });
       } catch {
-        // Sin red: las consultas usan la última copia guardada; los cambios no se pueden enviar
-        const guardado = cacheable && await cacheApi.leer(ruta);
+        // Sin red: las consultas usan la última copia guardada y los cambios se guardan para enviarlos después
+        if (guardable) return guardarCambio(ruta, method, body);
+        const guardado = cacheable && await leerSinConexion(ruta);
         if (guardado) return guardado;
+        if (ID_LOCAL.test(ruta)) throw new Error('Este registro aún no llega al servidor: podrás hacerlo cuando se envíe.');
+        if (cacheable) throw new Error('Sin conexión: esta información todavía no está guardada en este equipo.');
         throw new Error(navigator.onLine
           ? 'No hay conexión con el servidor. ¿Está encendido el backend?'
-          : 'Sin conexión a internet. Inténtalo cuando vuelva la señal.');
+          : 'Esta acción necesita conexión a internet. Inténtalo cuando vuelva la señal.');
       }
 
       const datos = await respuesta.json().catch(() => ({}));
@@ -378,6 +682,7 @@
       $('#asig').hidden = true;
       reiniciarAsistente();
       mostrarUsuario(null);
+      pintarCola();
       location.hash = '#login';
     }
 
@@ -419,6 +724,8 @@
           });
           sesion.guardar(datos);
           mostrarUsuario(datos.usuario);
+          pintarCola().then(sincronizarCola);
+          precargarDatos();
           form.reset();
           location.hash = destinoTrasLogin === '#login' ? '#tablero' : destinoTrasLogin;
           mostrarAviso(`Bienvenido, ${datos.usuario.nombre}.`);
@@ -431,6 +738,8 @@
 
       $('#cerrar-sesion')?.addEventListener('click', (e) => {
         e.preventDefault();
+        const sinEnviar = cambiosPorEnviar + cambiosFallidos;
+        if (sinEnviar && !confirm(`Tienes ${plural(sinEnviar, 'cambio', 'cambios')} sin enviar. Se quedarán en este equipo hasta que vuelvas a entrar. ¿Cerrar sesión?`)) return;
         cerrarSesion();
         mostrarAviso('Sesión cerrada.');
       });
@@ -1776,7 +2085,9 @@
         $('#asig-estado').textContent = '✓ Viaje asignado';
         $('#asig-cuerpo').replaceChildren(el('p', { class: 'asig__listo' },
           el('b', { text: v.folio }), ` quedó asignado a ${v.operador} con la unidad ${v.placas}. `,
-          'Avisamos al chofer y a quien creó el viaje (si activaron sus avisos).'));
+          v.pendiente_de_enviar
+            ? 'Se guardó en este equipo y se enviará al volver la conexión.'
+            : 'Avisamos al chofer y a quien creó el viaje (si activaron sus avisos).'));
         $('#asig-pie').replaceChildren(
           el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: (ev) => qrParaCliente(v, ev.currentTarget) }, 'QR para el cliente'),
           el('a', { href: '#monitoreo', class: 'btn btn--ghost btn--sm', onclick: cerrarAsignacion }, 'Ver en monitoreo'),
@@ -3541,16 +3852,10 @@
 
     /* ---------- PWA: aviso de conexión ---------- */
     function iniciarAvisoConexion() {
-      const aviso = $('#aviso-offline');
-      const actualizar = () => { aviso.hidden = navigator.onLine; };
-
-      window.addEventListener('offline', actualizar);
       window.addEventListener('online', () => {
-        actualizar();
         mostrarAviso('Conexión recuperada. Actualizando datos…');
         cargarSeccion({ silencioso: true });
       });
-      actualizar();
     }
 
     /* ---------- PWA: Service Worker y aviso de nueva versión ---------- */
@@ -3612,6 +3917,7 @@
       iniciarDetalle();
       iniciarInstalacion();
       iniciarAvisoConexion();
+      iniciarCola();
       iniciarNotificaciones();
       iniciarNavegacionConDatos();
       iniciarAsistente();

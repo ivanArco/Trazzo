@@ -1,6 +1,6 @@
 // Service Worker de Trazzo · Centro de Control
 // Sube la versión cada vez que publiques cambios para que los usuarios reciban la nueva interfaz.
-const CACHE = 'trazzo-v3.16';
+const CACHE = 'trazzo-v3.17';
 // Caché de las consultas a la API: la llena la página (js/trazzo-core.js) y se conserva entre versiones
 const CACHE_API = 'trazzo-api';
 
@@ -28,10 +28,20 @@ const ARCHIVOS = [
   './icons/apple-touch-icon.png'
 ];
 
+// Mapa y fuentes vienen de otros servidores; sin ellos la app funciona igual, por eso su falla no detiene la instalación
+const LEAFLET = [
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
+];
+const EXTERNOS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+
 // Instalación: guarda la interfaz en caché.
 // La versión nueva espera a que el usuario toque "Actualizar" (así no cambia la app a media tarea).
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)));
+  e.waitUntil(caches.open(CACHE).then(async (c) => {
+    await c.addAll(ARCHIVOS);
+    await Promise.allSettled(LEAFLET.map((url) => c.add(new Request(url, { mode: 'cors' }))));
+  }));
 });
 
 self.addEventListener('message', (e) => {
@@ -56,7 +66,7 @@ self.addEventListener('fetch', (e) => {
 
   // La API (backend) siempre va a la red; la copia sin conexión la maneja la página con la Cache API
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
+  if ((url.origin !== self.location.origin && !EXTERNOS.includes(url.hostname)) || url.pathname.includes('/api/')) return;
 
   if (request.mode === 'navigate') {
     // Sin conexión: la misma página guardada (rastreo.html?t=... se busca sin el ?t=) o, si no, la app
@@ -68,7 +78,7 @@ self.addEventListener('fetch', (e) => {
 
   e.respondWith(
     caches.match(request).then((guardado) => guardado || fetch(request).then((respuesta) => {
-      if (respuesta.ok) {
+      if (respuesta.ok || respuesta.type === 'opaque') {
         const copia = respuesta.clone();
         caches.open(CACHE).then((c) => c.put(request, copia));
       }

@@ -1445,6 +1445,14 @@ body:has(.screen:target) .login {
   color: #1a1300;
 }
 
+.banda--offline .btn { flex: none; color: inherit; border-color: currentColor; }
+
+.cola { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cola__item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.cola__item > div:first-child { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.cola__item .es-error { color: var(--alert); }
+.cola__botones { display: flex; gap: 6px; }
+
 .banda--version {
   background: var(--panel-2);
   border: 1px solid var(--accent);
