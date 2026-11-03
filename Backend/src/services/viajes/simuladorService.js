@@ -3,9 +3,7 @@
 import { enTransaccion } from '../../config/db.js';
 import * as viajeModel from '../../models/viajeModel.js';
 import * as flotaModel from '../../models/flotaModel.js';
-import { avisarViaje } from '../notificacionService.js';
-
-const CERCA_DEL_DESTINO = 90; // % del recorrido a partir del cual se avisa «está por llegar»
+import { avisarViaje, CERCA_DEL_DESTINO } from '../notificacionService.js';
 
 const MILISEGUNDOS_POR_MINUTO = 60_000;
 const MINUTOS_POR_PUNTO = 3;

@@ -14,6 +14,7 @@ router.get('/historial', viajes.historial);                                     
 router.get('/mapa', permitir('admin', 'capturista', 'operador'), viajes.mapa);   // unidades activas con trazo de ruta
 router.get('/', viajes.listar);                                                 // ?estado=en_ruta,retraso
 router.get('/:id', viajes.detalle);                                             // viaje + historial
+router.get('/:id/mapa', permitir('admin', 'capturista', 'operador'), viajes.mapaDeViaje); // ruta y posición para el seguimiento
 router.post('/', oficina, viajes.crear);                                        // registrar ruta
 router.patch('/:id/asignar', oficina, viajes.asignar);                          // { operador_id, unidad_id }
 router.post('/:id/rastreo', oficina, viajes.activarRastreo);                     // enlace + QR para el cliente

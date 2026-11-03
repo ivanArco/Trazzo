@@ -9,6 +9,10 @@ export const mapa = async (req, res) => {
   res.json(await viajeService.mapa(req.usuario));
 };
 
+export const mapaDeViaje = async (req, res) => {
+  res.json(await viajeService.mapaDeViaje(Number(req.params.id), req.usuario));
+};
+
 export const detalle = async (req, res) => {
   res.json(await viajeService.detalle(Number(req.params.id), req.usuario));
 };

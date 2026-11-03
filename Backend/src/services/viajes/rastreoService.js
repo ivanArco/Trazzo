@@ -5,6 +5,7 @@ import os from 'node:os';
 import QRCode from 'qrcode';
 import * as viajeModel from '../../models/viajeModel.js';
 import { estimar } from './rutaService.js';
+import { ubicacionEnCurso } from './viajeService.js';
 import { iaDisponible } from '../ia/asistenteService.js';
 import { pushDisponible, clavePublica, olvidarEnvio } from '../notificacionService.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -129,6 +130,7 @@ export async function vistaPublica(token) {
     duracion_min: viaje.duracion_min,
     operador: nombreDeOperador(viaje.operador),
     ruta,
+    ubicacion: await ubicacionEnCurso(viaje),
     // Las alertas del botón de pánico son internas: el cliente nunca las ve
     eventos: eventos.filter((e) => e.tipo !== 'panico')
       .map((e) => ({ tipo: e.tipo, texto: EVENTO_PUBLICO[e.tipo] || 'Actualización', fecha: e.creado_en })),

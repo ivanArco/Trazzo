@@ -88,6 +88,19 @@
 
     .camion svg { width: 18px; height: 18px; }
 
+    .camion--vivo { box-shadow: 0 0 0 0 var(--go); animation: camion-vivo 1.8s ease-out infinite; }
+
+    @keyframes camion-vivo {
+      to { box-shadow: 0 0 0 14px transparent; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .camion--vivo { animation: none; box-shadow: 0 0 0 3px var(--go); }
+    }
+
+    .mapa-fuente { margin: 10px 0 0; color: var(--muted); font-size: .82rem; }
+    .mapa-fuente--vivo { color: var(--go); font-weight: 600; }
+
     .rastreo__pie {
       text-align: center;
       color: var(--muted);
@@ -142,7 +155,8 @@
       <button type="button" class="btn btn--ghost rastreo__avisos" id="rt-avisos" hidden aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-bell" /></svg><span>Avísame cuando mi envío inicie, cambie o esté por llegar</span></button>
 
       <div class="panel" id="panel-mapa" hidden>
-        <div class="map" id="mapa" role="img" aria-label="Mapa con el recorrido del envío y la posición aproximada del camión"></div>
+        <div class="map" id="mapa" role="img" aria-label="Mapa con el recorrido del envío y la posición del camión"></div>
+        <p class="mapa-fuente" id="mapa-fuente"></p>
       </div>
 
       <div class="panel">
@@ -165,7 +179,7 @@
       </section>
     </div>
 
-    <p class="rastreo__pie">Se actualiza solo cada 15 segundos · Posición aproximada · Mapa © OpenStreetMap</p>
+    <p class="rastreo__pie">Se actualiza solo cada 15 segundos · Mapa © OpenStreetMap</p>
   </main>
 
   <script>
@@ -259,8 +273,20 @@
         }).addTo(mapa);
         mapa.fitBounds(L.latLngBounds(trazo), { padding: [28, 28] });
       }
-      camion.setLatLng(puntoEnTrazo(trazo, envio.avance / 100));
+
+      // GPS del teléfono del operador si está compartiendo; si no, la posición estimada por el avance
+      const gps = envio.ubicacion;
+      const punto = gps ? [gps.lat, gps.lon] : puntoEnTrazo(trazo, envio.avance / 100);
+      camion.setLatLng(punto);
       camion.bindTooltip(`${envio.avance} % del recorrido`);
+      camion.getElement()?.querySelector('.camion')?.classList.toggle('camion--vivo', Boolean(gps));
+      if (gps && !mapa.getBounds().contains(punto)) mapa.panTo(punto);
+
+      const fuente = $('#mapa-fuente');
+      fuente.classList.toggle('mapa-fuente--vivo', Boolean(gps));
+      fuente.textContent = gps
+        ? `Ubicación en vivo · GPS del camión, actualizada ${fmtHora.format(new Date(gps.actualizada_en))}`
+        : envio.estado === 'entregado' ? 'Envío entregado' : 'Posición aproximada según el avance del viaje';
     }
 
     /* ---------- Datos del envío ---------- */

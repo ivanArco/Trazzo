@@ -3,7 +3,7 @@ import * as viajeModel from '../../models/viajeModel.js';
 import * as flotaModel from '../../models/flotaModel.js';
 import { HttpError } from '../../utils/httpError.js';
 import { calcularDuracionCamion, estimar, progresoEnRuta } from './rutaService.js';
-import { avisarViaje } from '../notificacionService.js';
+import { avisarViaje, CERCA_DEL_DESTINO } from '../notificacionService.js';
 
 export const ESTADOS = ['pendiente', 'asignado', 'en_ruta', 'retraso', 'entregado', 'cancelado'];
 const rutasDelMapa = new Map();
@@ -103,6 +103,26 @@ export const mapa = async (usuario) => {
   }));
 };
 
+// Con GPS el simulador se detiene, así que aquí se calculan el avance y la llegada sobre la ruta real
+async function avanzarConGps(viaje, punto) {
+  let progreso = null;
+  try {
+    progreso = progresoEnRuta((await estimar(viaje)).trazo, punto);
+  } catch { /* sin ruta se conserva el último avance */ }
+  if (!progreso) return;
+
+  // Una mala señal puede ubicarlo atrás: el avance no retrocede. La entrega la confirma el operador.
+  const avance = Math.min(99, Math.max(viaje.avance, progreso.avance));
+  const { duracion_min: minutos } = calcularDuracionCamion(progreso.restante_km);
+  const eta = Math.floor((Date.now() + (minutos + (viaje.estado === 'retraso' ? 20 : 0)) * 60_000) / 1000);
+  await viajeModel.actualizar(viaje.id, { avance, eta: { sql: `FROM_UNIXTIME(${eta})` } });
+
+  if (viaje.avance < 50 && avance >= 50) {
+    await viajeModel.registrarEvento(viaje.id, 'avance', 'Va a la mitad del recorrido (GPS del teléfono)', viaje.operador_id);
+  }
+  if (viaje.avance < CERCA_DEL_DESTINO && avance >= CERCA_DEL_DESTINO) avisarViaje(viaje.id, 'cerca');
+}
+
 export const actualizarUbicacion = async (id, datos = {}, usuario) => {
   const viaje = await viajeModel.buscarPorId(id);
   verificarAcceso(viaje, usuario);
@@ -125,6 +145,7 @@ export const actualizarUbicacion = async (id, datos = {}, usuario) => {
   }
 
   await viajeModel.guardarUbicacion(id, { latitud, longitud, precision_m: precision });
+  await avanzarConGps(viaje, [latitud, longitud]);
   return await viajeModel.buscarPorId(id);
 };
 
@@ -194,6 +215,33 @@ export const detalle = async (id, usuario) => {
   const viaje = await viajeModel.buscarPorId(id);
   verificarAcceso(viaje, usuario);
   return { ...viaje, eventos: await viajeModel.eventosDeViaje(id) };
+};
+
+// La ubicación real del chofer solo se comparte mientras el viaje está en curso
+export async function ubicacionEnCurso(viaje) {
+  const gps = ['en_ruta', 'retraso'].includes(viaje.estado) ? await viajeModel.ubicacionReciente(viaje.id) : null;
+  return gps ? {
+    lat: Number(gps.gps_latitud),
+    lon: Number(gps.gps_longitud),
+    precision_m: Number(gps.gps_precision_m),
+    actualizada_en: gps.gps_actualizado_en
+  } : null;
+}
+
+// Ruta y posición de un viaje, para el mapa de su seguimiento. Si el servicio de mapas falla, va sin trazo.
+export const mapaDeViaje = async (id, usuario) => {
+  const viaje = await viajeModel.buscarPorId(id);
+  verificarAcceso(viaje, usuario);
+  let ruta = null;
+  try {
+    ruta = await estimar(viaje);
+  } catch { /* la ventana funciona sin mapa */ }
+  return {
+    trazo: ruta?.trazo ?? null,
+    origen: ruta?.origen ?? null,
+    destino: ruta?.destino ?? null,
+    ubicacion: await ubicacionEnCurso(viaje)
+  };
 };
 
 export const resumen = async () => viajeModel.resumen();

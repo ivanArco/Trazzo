@@ -1192,14 +1192,84 @@
       $('#dv-gps-toggle').textContent = 'Dejar de compartir ubicación';
     }
 
+    /* ---------- Mapa del seguimiento ---------- */
+    let mapaDetalle = null;
+    let capaDetalle = null;
+    let viajeEnMapa = null;
+
+    function textoFuenteMapa(v, gps) {
+      if (gps) {
+        const precision = Number.isFinite(gps.precision_m) ? ` · ±${Math.round(gps.precision_m)} m` : '';
+        return `Ubicación en vivo · GPS del camión, actualizada ${fmtHora.format(new Date(gps.actualizada_en))}${precision}`;
+      }
+      if (v.estado === 'entregado') return 'Viaje entregado';
+      if (v.estado === 'cancelado') return 'Viaje cancelado · se muestra la ruta planeada';
+      if (['pendiente', 'asignado'].includes(v.estado)) return 'Aún no sale · se muestra la ruta planeada';
+      return 'Posición aproximada según el avance del viaje · sin GPS del camión';
+    }
+
+    async function cargarMapaDetalle(v) {
+      const panel = $('#dv-mapa-panel');
+      let datos = null;
+      // Sin Leaflet, sin permiso o con un viaje que aún no llega al servidor, la ventana sigue sin mapa
+      if (window.L && usuarioActual()?.rol !== 'cliente') {
+        try { datos = await api(`/viajes/${v.id}/mapa`); } catch { /* sin datos del mapa */ }
+      }
+      if (viajeAbierto !== v.id) return;
+      panel.hidden = !datos?.trazo?.length;
+      if (panel.hidden) return;
+
+      if (!mapaDetalle) {
+        mapaDetalle = L.map('dv-mapa', { zoomControl: true, scrollWheelZoom: false });
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapaDetalle);
+        capaDetalle = L.layerGroup().addTo(mapaDetalle);
+      }
+      mapaDetalle.invalidateSize();
+
+      const color = (nombre) => getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+      const gps = datos.ubicacion;
+      const estimada = ubicarEnTrazo(datos.trazo, v.avance);
+      const posicion = gps ? [gps.lat, gps.lon] : estimada.posicion;
+
+      capaDetalle.clearLayers();
+      L.polyline(datos.trazo, { color: color('--line'), weight: 5, opacity: .9 }).addTo(capaDetalle);
+      if (!gps) L.polyline(estimada.recorrido, { color: color('--go'), weight: 5 }).addTo(capaDetalle);
+      if (datos.origen) L.circleMarker([datos.origen.lat, datos.origen.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color('--go'), fillOpacity: 1 }).bindTooltip(`Origen: ${ciudad(v.origen)}`).addTo(capaDetalle);
+      if (datos.destino) L.circleMarker([datos.destino.lat, datos.destino.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color('--accent'), fillOpacity: 1 }).bindTooltip(`Destino: ${ciudad(v.destino)}`).addTo(capaDetalle);
+      L.marker(posicion, {
+        icon: L.divIcon({
+          className: '',
+          html: `<span class="dv-mapa__camion${gps ? ' dv-mapa__camion--vivo' : ''}"><svg class="i" aria-hidden="true"><use href="#i-truck" /></svg></span>`,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17]
+        }),
+        keyboard: false
+      }).bindTooltip(`${v.folio} · ${v.avance} %`).addTo(capaDetalle);
+
+      // Se encuadra al abrir cada viaje; después solo se sigue al camión si sale de la vista
+      if (viajeEnMapa !== v.id) {
+        viajeEnMapa = v.id;
+        mapaDetalle.fitBounds(L.latLngBounds([...datos.trazo, posicion]), { padding: [28, 28] });
+      } else if (gps && !mapaDetalle.getBounds().contains(posicion)) {
+        mapaDetalle.panTo(posicion);
+      }
+
+      const fuente = $('#dv-mapa-fuente');
+      fuente.textContent = textoFuenteMapa(v, gps);
+      fuente.classList.toggle('dv-mapa__fuente--vivo', Boolean(gps));
+    }
+
     async function abrirDetalle(id) {
       try {
         if (viajeAbierto !== id) $('#dv-rastreo').hidden = true;
+        if (viajeEnMapa !== id) $('#dv-mapa-panel').hidden = true; // no dejar a la vista el mapa del viaje anterior
         viajeAbierto = id;
         $('#dv-nota').value = '';
-        pintarDetalle(await api(`/viajes/${id}`));
+        const viaje = await api(`/viajes/${id}`);
+        pintarDetalle(viaje);
         const dialogo = $('#dlg-viaje');
         if (!dialogo.open) dialogo.showModal();
+        cargarMapaDetalle(viaje);
       } catch (error) {
         mostrarAviso(error.message);
       }
@@ -1207,7 +1277,11 @@
 
     async function refrescarDetalle() {
       if (!viajeAbierto) return;
-      try { pintarDetalle(await api(`/viajes/${viajeAbierto}`)); } catch { /* se reintenta en la siguiente vuelta */ }
+      try {
+        const viaje = await api(`/viajes/${viajeAbierto}`);
+        pintarDetalle(viaje);
+        cargarMapaDetalle(viaje);
+      } catch { /* se reintenta en la siguiente vuelta */ }
     }
 
     function pintarDetalle(v) {
@@ -1378,6 +1452,7 @@
       });
       dialogo.addEventListener('close', () => {
         viajeAbierto = null;
+        viajeEnMapa = null;
         viajeEscaner = null;
         clearTimeout(temporizadorListaViaje);
         cerrarEscanerDocumento({ ocultar: true });

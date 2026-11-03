@@ -238,6 +238,16 @@ export const viajeActivoDeOperador = async (operadorId, exceptoViajeId, conexion
   return rows[0];
 };
 
+// Última ubicación del teléfono del operador, si la mandó en los últimos 2 minutos
+export const ubicacionReciente = async (id) => {
+  const [rows] = await pool.query(
+    `SELECT gps_latitud, gps_longitud, gps_precision_m, gps_actualizado_en FROM viajes
+     WHERE id = ? AND gps_latitud IS NOT NULL AND gps_actualizado_en >= NOW() - INTERVAL 2 MINUTE`,
+    [id]
+  );
+  return rows[0];
+};
+
 // Viajes que el simulador hace avanzar
 export const viajesEnMovimiento = async () => {
   const [rows] = await pool.query(

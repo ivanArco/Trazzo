@@ -19,6 +19,8 @@ if (pushDisponible()) {
   webpush.setVapidDetails(process.env.VAPID_SUBJECT?.trim() || 'mailto:soporte@trazzo.example', PUBLICA, PRIVADA);
 }
 
+export const CERCA_DEL_DESTINO = 90; // % del recorrido a partir del cual se avisa «está por llegar»
+
 // Solo servicios push reales (Chrome, Firefox, Edge, Safari): el servidor envía peticiones a esa dirección,
 // así que no se aceptan direcciones arbitrarias (evita que la ruta pública se use para llegar a otros servidores)
 const SERVICIO_PUSH = /^https:\/\/([a-z0-9-]+\.)*(fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com|push\.apple\.com)\//i;

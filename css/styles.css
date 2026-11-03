@@ -1419,6 +1419,31 @@ body:has(.screen:target) .login {
   background: var(--panel-2);
 }
 .dv-gps[hidden] { display: none; }
+
+.dv-mapa { margin: 14px 0; }
+.dv-mapa[hidden] { display: none; }
+#dv-mapa { height: clamp(220px, 38vh, 340px); font: inherit; }
+.dv-mapa__fuente { margin: 8px 0 0; color: var(--muted); font-size: .82rem; }
+.dv-mapa__fuente--vivo { color: var(--go); font-weight: 600; }
+.dv-mapa__camion {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #1a1300;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+.dv-mapa__camion--vivo { animation: dv-camion-vivo 1.8s ease-out infinite; }
+@keyframes dv-camion-vivo {
+  from { box-shadow: 0 0 0 0 var(--go); }
+  to { box-shadow: 0 0 0 14px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dv-mapa__camion--vivo { animation: none; box-shadow: 0 0 0 3px var(--go); }
+}
 .dv-gps p { margin: 0; font-size: .85rem; }
 .dv-gps .es-error { color: var(--alert); }
 

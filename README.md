@@ -110,6 +110,17 @@ routes → controllers → services → models → MySQL
 
 `Backend/test/rutas.test.js` comprueba que cada ruta exista y solo responda a los roles correctos (`pnpm test`, sin base de datos).
 
+### Mapa en el seguimiento de un viaje
+
+La ventana «Seguimiento» (Monitoreo, Historial o el mapa del Tablero) muestra la ruta del viaje y el camión, con GPS en vivo
+si el operador lo comparte o la posición aproximada si no. Los datos vienen de `GET /api/viajes/:id/mapa`.
+
+### Ubicación en el rastreo del cliente
+
+Si el operador comparte el GPS de su teléfono, `rastreo.html` muestra su ubicación real marcada «en vivo», y el avance
+y la llegada estimada se calculan sobre la ruta. Sin GPS reciente (2 minutos) se muestra la posición aproximada según el
+avance. La ubicación solo se envía con el viaje en curso, nunca después de la entrega.
+
 ### Trabajo sin conexión
 
 - **Consultar:** las consultas se guardan en la Cache API y, al iniciar sesión o volver la señal, se precarga lo

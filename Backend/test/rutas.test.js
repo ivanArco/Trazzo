@@ -23,6 +23,7 @@ const RUTAS_PROTEGIDAS = [
   ['GET', '/api/viajes/mapa', PERSONAL],
   ['GET', '/api/viajes', TODOS],
   ['GET', '/api/viajes/1', TODOS],
+  ['GET', '/api/viajes/1/mapa', PERSONAL],
   ['POST', '/api/viajes', OFICINA],
   ['PATCH', '/api/viajes/1/asignar', OFICINA],
   ['POST', '/api/viajes/1/rastreo', OFICINA],
