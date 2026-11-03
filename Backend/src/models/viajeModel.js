@@ -254,6 +254,8 @@ export const viajesEnMovimiento = async () => {
     `SELECT id, folio, estado, avance, unidad_id, salida, eta, duracion_min,
             UNIX_TIMESTAMP(salida) * 1000 AS salida_ms,
             UNIX_TIMESTAMP(eta) * 1000 AS eta_ms,
+            (SELECT UNIX_TIMESTAMP(MIN(e.creado_en)) * 1000 FROM eventos_viaje e
+              WHERE e.viaje_id = viajes.id AND e.tipo = 'en_ruta') AS inicio_ms,
             (gps_actualizado_en >= NOW() - INTERVAL 2 MINUTE) AS gps_reciente
      FROM viajes
      WHERE unidad_id IS NOT NULL

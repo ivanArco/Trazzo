@@ -18,10 +18,17 @@ export function calcularProgresoProgramado(viaje, ahora = Date.now()) {
     ? duracion
     : 100 * MINUTOS_POR_PUNTO;
   const etaGuardada = Number(viaje.eta_ms);
-  const eta = Number.isFinite(etaGuardada) && etaGuardada > salida
-    ? etaGuardada
-    : salida + duracionMinutos * MILISEGUNDOS_POR_MINUTO;
-  const porcentajeTiempo = Math.max(0, Math.min(1, (ahora - salida) / (eta - salida)));
+  const inicioReal = Number(viaje.inicio_ms);
+  const duracionMs = duracionMinutos * MILISEGUNDOS_POR_MINUTO;
+
+  // Si se inició a mano antes de su salida programada, el tiempo corre desde ese momento
+  const adelantado = viaje.estado !== 'asignado' && Number.isFinite(inicioReal) && inicioReal < salida;
+  const inicio = adelantado ? inicioReal : salida;
+  const etaPrevista = inicio + duracionMs;
+  const eta = adelantado
+    ? Math.min(Number.isFinite(etaGuardada) && etaGuardada > inicio ? etaGuardada : etaPrevista, etaPrevista)
+    : Number.isFinite(etaGuardada) && etaGuardada > salida ? etaGuardada : etaPrevista;
+  const porcentajeTiempo = Math.max(0, Math.min(1, (ahora - inicio) / (eta - inicio)));
   const avanceCalculado = Math.floor(porcentajeTiempo * 100);
   const avance = Math.max(Number(viaje.avance) || 0, avanceCalculado);
   const entregado = ahora >= eta;
