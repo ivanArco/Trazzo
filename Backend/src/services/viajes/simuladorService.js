@@ -1,9 +1,9 @@
 // Seguimiento SIMULADO (solo de prueba): mientras no haya GPS real, cada cierto tiempo
 // calcula el avance entre la salida programada y la ETA prevista.
-import { enTransaccion } from '../config/db.js';
-import * as viajeModel from '../models/viajeModel.js';
-import * as flotaModel from '../models/flotaModel.js';
-import { avisarViaje } from './notificacionService.js';
+import { enTransaccion } from '../../config/db.js';
+import * as viajeModel from '../../models/viajeModel.js';
+import * as flotaModel from '../../models/flotaModel.js';
+import { avisarViaje } from '../notificacionService.js';
 
 const CERCA_DEL_DESTINO = 90; // % del recorrido a partir del cual se avisa «está por llegar»
 

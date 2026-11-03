@@ -72,3 +72,5 @@ export async function actualizar(id, datos = {}) {
   }
   return await flotaModel.buscarUnidad(id);
 }
+
+export const listarOperadores = () => flotaModel.listarOperadores();

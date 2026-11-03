@@ -1,11 +1,9 @@
 // Rutas del módulo documental con límites de carga y permisos por rol.
 import { Router } from 'express';
-import multer from 'multer';
-import { rateLimit } from 'express-rate-limit';
 import * as documentos from '../controllers/documentoController.js';
 import { verificarToken, permitir } from '../middlewares/auth.js';
-import { MAX_BYTES } from '../services/documentoService.js';
-import { HttpError } from '../utils/httpError.js';
+import { limitar, porUsuario } from '../middlewares/limite.js';
+import { recibirImagen } from '../middlewares/recibirImagen.js';
 
 const router = Router();
 const administracion = permitir('admin');
@@ -14,25 +12,7 @@ const adminYOperador = permitir('admin', 'operador');
 router.use(verificarToken);
 
 // Cada subida o relectura cuesta una llamada al OCR: máximo 20 por minuto por usuario
-const limitarLecturas = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 20,
-  keyGenerator: (req) => `usuario-${req.usuario.id}`,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  message: { message: 'Demasiados documentos seguidos. Espera un minuto.' }
-});
-
-// La foto llega en memoria (campo "imagen") y se valida en el servicio
-const leerImagen = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES, files: 1 } }).single('imagen');
-
-const recibirImagen = (req, res, next) => {
-  leerImagen(req, res, (error) => {
-    if (!error) return next();
-    if (error.code === 'LIMIT_FILE_SIZE') return next(new HttpError(413, 'La imagen pesa más de 5 MB'));
-    next(new HttpError(400, 'No se pudo leer la imagen enviada'));
-  });
-};
+const limitarLecturas = limitar({ limite: 20, clave: porUsuario, mensaje: 'Demasiados documentos seguidos. Espera un minuto.' });
 
 // Rutas fijas (/viaje/:id) van antes de /:id para que no se confundan con un id
 router.post('/', adminYOperador, limitarLecturas, recibirImagen, documentos.subir);  // multipart: viaje_id + imagen

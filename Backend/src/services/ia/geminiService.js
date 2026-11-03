@@ -3,7 +3,7 @@
 // propuestas son las mismas que con Claude: aquí solo se traduce al formato de Gemini.
 // Plan gratuito: Google puede usar lo que se envía para mejorar sus productos; no mandes datos sensibles.
 import { GoogleGenAI, ApiError } from '@google/genai';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 // gemini-3.5-flash-lite: rápido (≈1 s), con plan gratis y llamadas a funciones. Se cambia con GEMINI_MODEL.
 export const MODELO_GEMINI = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';

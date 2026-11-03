@@ -120,6 +120,18 @@ export const tokenDeRastreo = async (id) => {
   return rows[0]?.rastreo_token;
 };
 
+// Quién creó el viaje y quién lo asignó por última vez
+export const responsables = async (id) => {
+  const [rows] = await pool.query(
+    `SELECT v.creado_por,
+            (SELECT e.usuario_id FROM eventos_viaje e
+              WHERE e.viaje_id = v.id AND e.tipo = 'asignado' ORDER BY e.id DESC LIMIT 1) AS asignado_por
+       FROM viajes v WHERE v.id = ?`,
+    [id]
+  );
+  return rows[0];
+};
+
 export const buscarPorClaveCliente = async (clave, usuarioId) => {
   const [rows] = await pool.query(`${SELECT_VIAJE} WHERE v.clave_cliente = ? AND v.creado_por = ?`, [clave, usuarioId]);
   return rows[0];

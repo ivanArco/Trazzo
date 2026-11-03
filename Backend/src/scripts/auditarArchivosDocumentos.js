@@ -1,8 +1,8 @@
 // Diagnóstico de archivos documentales ausentes; solo archiva con opción y confirmación explícitas.
 import 'dotenv/config';
 import pool from '../config/db.js';
-import * as almacen from '../services/almacenService.js';
-import { archivar } from '../services/documentoService.js';
+import * as almacen from '../services/documentos/almacenService.js';
+import { archivar } from '../services/documentos/documentoService.js';
 
 const argumentos = process.argv.slice(2);
 const valor = (nombre) => {

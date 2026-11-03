@@ -5,7 +5,7 @@
 //   · el cliente que sigue el envío en rastreo.html (textos públicos, sin notas internas)
 // Los avisos se mandan en segundo plano: si el envío falla, el cambio del viaje no se ve afectado.
 import webpush from 'web-push';
-import pool from '../config/db.js';
+import * as suscripcionModel from '../models/suscripcionModel.js';
 import * as viajeModel from '../models/viajeModel.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -23,28 +23,6 @@ if (pushDisponible()) {
 // así que no se aceptan direcciones arbitrarias (evita que la ruta pública se use para llegar a otros servidores)
 const SERVICIO_PUSH = /^https:\/\/([a-z0-9-]+\.)*(fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com|push\.apple\.com)\//i;
 
-// La tabla se crea sola la primera vez (también está en database/schema.sql)
-let tablaLista = null;
-function asegurarTabla() {
-  tablaLista ??= pool.query(`CREATE TABLE IF NOT EXISTS suscripciones_push (
-    id INT NOT NULL AUTO_INCREMENT,
-    endpoint VARCHAR(600) CHARACTER SET ascii NOT NULL,
-    p256dh VARCHAR(200) NOT NULL,
-    auth VARCHAR(100) NOT NULL,
-    usuario_id INT NULL,
-    viaje_id INT NOT NULL DEFAULT 0,
-    creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY endpoint_viaje (endpoint, viaje_id),
-    KEY viaje (viaje_id),
-    CONSTRAINT fk_push_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`).catch((error) => {
-    tablaLista = null;
-    throw error;
-  });
-  return tablaLista;
-}
-
 /* ---------- Suscripciones ---------- */
 // usuarioId: personal con sesión (viajeId = 0) · viajeId: cliente que sigue ese envío
 export async function suscribir(suscripcion, { usuarioId = null, viajeId = 0 } = {}) {
@@ -54,27 +32,20 @@ export async function suscribir(suscripcion, { usuarioId = null, viajeId = 0 } =
     || typeof keys?.p256dh !== 'string' || typeof keys?.auth !== 'string') {
     throw new HttpError(400, 'La suscripción de notificaciones no es válida');
   }
-  await asegurarTabla();
-  await pool.query(
-    `INSERT INTO suscripciones_push (endpoint, p256dh, auth, usuario_id, viaje_id) VALUES (?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE p256dh = VALUES(p256dh), auth = VALUES(auth), usuario_id = VALUES(usuario_id)`,
-    [endpoint, keys.p256dh.slice(0, 200), keys.auth.slice(0, 100), usuarioId, viajeId]
-  );
+  await suscripcionModel.guardar({ endpoint, p256dh: keys.p256dh.slice(0, 200), auth: keys.auth.slice(0, 100), usuarioId, viajeId });
   return { ok: true };
 }
 
 export async function cancelar(endpoint, { viajeId = 0 } = {}) {
   if (typeof endpoint !== 'string') throw new HttpError(400, 'Falta la suscripción');
-  await asegurarTabla();
-  await pool.query('DELETE FROM suscripciones_push WHERE endpoint = ? AND viaje_id = ?', [endpoint, viajeId]);
+  await suscripcionModel.eliminar(endpoint, viajeId);
   return { ok: true };
 }
 
 // Al desactivar el rastreo, el cliente deja de recibir avisos de ese envío
 export async function olvidarEnvio(viajeId) {
   if (!pushDisponible()) return;
-  await asegurarTabla();
-  await pool.query('DELETE FROM suscripciones_push WHERE viaje_id = ?', [viajeId]);
+  await suscripcionModel.eliminarDeViaje(viajeId);
 }
 
 /* ---------- Textos ---------- */
@@ -139,13 +110,7 @@ export function avisarViaje(viajeId, tipo, { actorId = null, reanuda = false, no
 
 // Personal involucrado en el viaje: quien lo creó, quien lo asignó (último evento «asignado») y el chofer
 async function involucrados(viaje, anteriorOperadorId) {
-  const [[datos]] = await pool.query(
-    `SELECT v.creado_por,
-            (SELECT e.usuario_id FROM eventos_viaje e
-              WHERE e.viaje_id = v.id AND e.tipo = 'asignado' ORDER BY e.id DESC LIMIT 1) AS asignado_por
-       FROM viajes v WHERE v.id = ?`,
-    [viaje.id]
-  );
+  const datos = await viajeModel.responsables(viaje.id);
   const retirado = anteriorOperadorId && anteriorOperadorId !== viaje.operador_id ? anteriorOperadorId : null;
   return {
     ids: [...new Set([datos?.creado_por, datos?.asignado_por, viaje.operador_id, retirado].filter(Boolean))],
@@ -154,17 +119,12 @@ async function involucrados(viaje, anteriorOperadorId) {
 }
 
 async function enviar(viajeId, tipo, { actorId, reanuda, nota, anteriorOperadorId }) {
-  await asegurarTabla();
   const viaje = await viajeModel.buscarPorId(viajeId);
   const mensaje = viaje && textos(tipo, viaje, { reanuda, nota: nota?.trim().slice(0, 120) });
   if (!mensaje) return;
 
   const { ids, retirado } = await involucrados(viaje, tipo === 'asignado' ? anteriorOperadorId : null);
-  const [suscripciones] = await pool.query(
-    `SELECT id, endpoint, p256dh, auth, usuario_id, viaje_id FROM suscripciones_push
-      WHERE viaje_id = ? OR (viaje_id = 0 AND usuario_id IN (?))`,
-    [viaje.id, ids.length ? ids : [-1]]
-  );
+  const suscripciones = await suscripcionModel.deViajeYUsuarios(viaje.id, ids);
   if (!suscripciones.length) return;
   const token = mensaje.cliente ? await viajeModel.tokenDeRastreo(viaje.id) : null;
 
@@ -192,7 +152,7 @@ async function entregar(s, aviso, opciones) {
     await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(aviso), opciones);
   } catch (error) {
     // 404/410: el navegador canceló la suscripción; se borra para no volver a intentarlo
-    if ([404, 410].includes(error.statusCode)) await pool.query('DELETE FROM suscripciones_push WHERE id = ?', [s.id]);
+    if ([404, 410].includes(error.statusCode)) await suscripcionModel.eliminarPorId(s.id);
     else console.error('Notificaciones: no se pudo enviar un aviso', error.statusCode || error.message);
   }
 }
@@ -204,12 +164,6 @@ export function avisarRoles(roles, aviso) {
 }
 
 async function enviarARoles(roles, aviso) {
-  await asegurarTabla();
-  const [suscripciones] = await pool.query(
-    `SELECT s.id, s.endpoint, s.p256dh, s.auth FROM suscripciones_push s
-       JOIN usuarios u ON u.id = s.usuario_id
-      WHERE s.viaje_id = 0 AND u.rol IN (?)`,
-    [roles]
-  );
+  const suscripciones = await suscripcionModel.deRoles(roles);
   await Promise.all(suscripciones.map((s) => entregar(s, aviso, { TTL: 24 * 3600, urgency: 'high' })));
 }

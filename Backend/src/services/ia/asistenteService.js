@@ -3,12 +3,12 @@
 // cambiar estado) NUNCA se ejecutan aquí: se devuelven como "propuestas" que la persona confirma
 // con un botón, y entonces el frontend llama a los endpoints normales (con sus permisos y validaciones).
 import Anthropic from '@anthropic-ai/sdk';
-import * as viajeService from './viajeService.js';
-import * as viajeModel from '../models/viajeModel.js';
-import * as flotaModel from '../models/flotaModel.js';
-import { estimar } from './rutaService.js';
+import * as viajeService from '../viajes/viajeService.js';
+import * as viajeModel from '../../models/viajeModel.js';
+import * as flotaModel from '../../models/flotaModel.js';
+import { estimar } from '../viajes/rutaService.js';
 import { geminiDisponible, conversarConHerramientas } from './geminiService.js';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 export const MODELO = 'claude-opus-5-5';
 const MAX_VUELTAS = 8;          // consultas a herramientas por pregunta

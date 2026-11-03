@@ -1,14 +1,9 @@
-import { responder } from '../services/chatbotService.js';
+import { responder } from '../services/ia/chatbotService.js';
 
-export async function chat(req, res, next) {
-  try {
-    const { mensajes } = req.body;
-    if (!Array.isArray(mensajes)) {
-      return res.status(400).json({ message: 'mensajes debe ser an array' });
-    }
-    const resultado = await responder({ usuario: req.usuario, mensajes });
-    res.json(resultado);
-  } catch (error) {
-    next(error);
+export const chat = async (req, res) => {
+  const { mensajes } = req.body;
+  if (!Array.isArray(mensajes)) {
+    return res.status(400).json({ message: 'mensajes debe ser an array' });
   }
-}
+  res.json(await responder({ usuario: req.usuario, mensajes }));
+};

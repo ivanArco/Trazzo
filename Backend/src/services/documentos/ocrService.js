@@ -6,7 +6,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 export const TIPOS = ['comprobante_entrega', 'guia_remision', 'factura', 'identificacion', 'otro'];
 const CONFIANZAS = ['alta', 'media', 'baja'];

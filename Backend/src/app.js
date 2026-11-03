@@ -3,75 +3,38 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import authRoutes from './routes/authRouter.js';
-import userRoutes from './routes/userRouter.js';
-import viajeRoutes from './routes/viajeRouter.js';
-import flotaRoutes from './routes/flotaRouter.js';
-import rutaRoutes from './routes/rutaRouter.js';
+import rutasApi from './routes/index.js';
 import rastreoRoutes from './routes/rastreoRouter.js';
-import asistenteRoutes from './routes/asistenteRouter.js';
-import chatbotRoutes from './routes/chatbotRouter.js';
-import traficoRoutes from './routes/traficoRouter.js';
-import pushRoutes from './routes/pushRouter.js';
-import documentoRoutes from './routes/documentoRouter.js';
-import panicoRoutes from './routes/panicoRouter.js';
+import { rutaNoEncontrada, manejarErrores } from './middlewares/errores.js';
 
-// Obtener la ruta equivalente a __dirname para ES Modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// El frontend está en la raíz del proyecto, dos niveles arriba de Backend/src
+const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../');
 
 const app = express();
 
-// 1. Archivos estáticos
-// Subir dos niveles desde Backend/src hasta la raíz del proyecto para servir HTML, CSS, JS e imágenes
+// 1. Archivos estáticos (HTML, CSS, JS e imágenes), sin publicar el código del backend
 app.use((req, res, next) => {
   if (/^\/backend(?:\/|$)/i.test(req.path)) return res.sendStatus(404);
   next();
 });
-app.use(express.static(path.join(__dirname, '../../')));
+app.use(express.static(RAIZ));
 
-// Rastreo público para clientes
+// 2. Rastreo público para clientes: va antes de CORS porque acepta cualquier origen
 app.use('/api/rastreo', rastreoRoutes);
 
-// Configuración de CORS
+// 3. API con los orígenes permitidos
 const origenes = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({ origin: origenes.length ? origenes : false }));
 app.use(express.json());
+app.use('/api', rutasApi);
 
-// Definición de rutas principales de la API
-app.get('/api/health', (req, res) => res.json({ ok: true }));
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/viajes', viajeRoutes);
-app.use('/api/flota', flotaRoutes);
-app.use('/api/rutas', rutaRoutes);
-app.use('/api/asistente', asistenteRoutes);
-app.use('/api/chatbot', chatbotRoutes);
-app.use('/api/trafico', traficoRoutes);
-app.use('/api/push', pushRoutes);
-// API de carga, consulta y revisión de comprobantes de viaje.
-app.use('/api/documentos', documentoRoutes);
-app.use('/api/panico', panicoRoutes);
-
-// 2. Servir el index.html en la raíz (/)
+// 4. La aplicación web en la raíz (/)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../index.html'));
+  res.sendFile(path.join(RAIZ, 'index.html'));
 });
 
-// 3. Manejador de ruta inexistente (se mantiene AL FINAL, solo para lo que no sea API ni archivos)
-app.use((req, res) => {
-  res.status(404).json({ message: 'Ruta no encontrada' });
-});
-
-// Manejador de errores
-app.use((error, req, res, next) => {
-  if (error.type === 'entity.parse.failed') {
-    return res.status(400).json({ message: 'El cuerpo de la petición no es JSON válido' });
-  }
-  if (error.status) return res.status(error.status).json({ message: error.message });
-
-  console.error(error);
-  res.status(500).json({ message: 'Error interno del servidor' });
-});
+// 5. Al final: lo que no coincidió con nada y los errores
+app.use(rutaNoEncontrada);
+app.use(manejarErrores);
 
 export default app;

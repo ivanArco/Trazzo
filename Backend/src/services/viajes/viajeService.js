@@ -1,9 +1,9 @@
-import { enTransaccion } from '../config/db.js';
-import * as viajeModel from '../models/viajeModel.js';
-import * as flotaModel from '../models/flotaModel.js';
-import { HttpError } from '../utils/httpError.js';
+import { enTransaccion } from '../../config/db.js';
+import * as viajeModel from '../../models/viajeModel.js';
+import * as flotaModel from '../../models/flotaModel.js';
+import { HttpError } from '../../utils/httpError.js';
 import { calcularDuracionCamion, estimar, progresoEnRuta } from './rutaService.js';
-import { avisarViaje } from './notificacionService.js';
+import { avisarViaje } from '../notificacionService.js';
 
 export const ESTADOS = ['pendiente', 'asignado', 'en_ruta', 'retraso', 'entregado', 'cancelado'];
 const rutasDelMapa = new Map();

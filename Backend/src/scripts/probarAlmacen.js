@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
-import * as almacen from '../services/almacenService.js';
+import * as almacen from '../services/documentos/almacenService.js';
 
 const clave = `${crypto.randomUUID()}.png`;
 const contenido = Buffer.from('Trazzo storage smoke test');

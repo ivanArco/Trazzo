@@ -1,10 +1,10 @@
 // Asistente con IA para el CLIENTE en la página pública de rastreo («Pregunta sobre tu envío»).
 // Solo ve los mismos datos públicos que la página (vistaPublica): sin flete, placas, notas ni personal.
 // No tiene herramientas: no puede consultar otros viajes ni cambiar nada; solo explica este envío.
-import { vistaPublica } from './rastreoService.js';
+import { vistaPublica } from '../viajes/rastreoService.js';
 import { obtenerCliente, traducirError, MODELO, proveedorIA } from './asistenteService.js';
 import { responderTexto } from './geminiService.js';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 const MAX_PREGUNTA = 300;      // caracteres por pregunta
 const MAX_HISTORIAL = 6;       // mensajes anteriores que se envían como contexto

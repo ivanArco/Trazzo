@@ -2,7 +2,7 @@
 //   Nominatim → convierte la dirección en coordenadas
 //   OSRM      → calcula el recorrido por carretera (distancia y tiempo en auto)
 // Los servidores públicos piden uso moderado, por eso todo se guarda en caché en memoria.
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OSRM = 'https://router.project-osrm.org/route/v1/driving';

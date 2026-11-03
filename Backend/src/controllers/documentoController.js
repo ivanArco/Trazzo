@@ -1,6 +1,6 @@
 // Controladores HTTP para carga, consulta, lectura OCR y revisión de documentos.
-import * as documentoService from '../services/documentoService.js';
-import { informacionMotor } from '../services/ocrService.js';
+import * as documentoService from '../services/documentos/documentoService.js';
+import { informacionMotor } from '../services/documentos/ocrService.js';
 
 export const subir = async (req, res) => {
   res.status(202).json(await documentoService.subir(req.file, req.body, req.usuario));

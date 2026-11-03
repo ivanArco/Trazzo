@@ -26,7 +26,7 @@ Muestra el tráfico real de las rutas de los viajes asignados y en ruta, con dat
 
 | Archivo | Cambio |
 |---|---|
-| `Backend/src/services/traficoService.js` | **Nuevo.** Consulta a TomTom, caché, cuota diaria, recomendación e imágenes del mapa |
+| `Backend/src/services/viajes/traficoService.js` | **Nuevo.** Consulta a TomTom, caché, cuota diaria, recomendación e imágenes del mapa |
 | `Backend/src/routes/traficoRouter.js` | **Nuevo.** Rutas `/api/trafico` |
 | `Backend/src/app.js` | Monta `/api/trafico` |
 | `Backend/.env.example` | Nueva variable `TOMTOM_API_KEY` (vacía; cada quien pone la suya en `.env`) |
@@ -64,7 +64,7 @@ administradores lo ven en la web al instante.
 | `Backend/src/models/panicoModel.js` | **Nuevo.** Consultas SQL |
 | `Backend/src/services/panicoService.js` | **Nuevo.** Validación, una alerta activa por operador, cierre por administrador |
 | `Backend/src/routes/panicoRouter.js` | **Nuevo.** Rutas `/api/panico` (operador: 30 solicitudes/min) |
-| `Backend/src/services/rastreoService.js` | Oculta los eventos `panico` en el rastreo público |
+| `Backend/src/services/viajes/rastreoService.js` | Oculta los eventos `panico` en el rastreo público |
 | `partials/panico.html`, `js/trazzo-core.js`, `css/styles.css` (sección 19), `index.html`, `js/app.js` | Aviso y ventana para administradores |
 
 ### Base de datos en la nube (Aiven)
@@ -88,6 +88,27 @@ pueden ir como `\n`). Después corre `pnpm migrar` una vez para crear o actualiz
 
 > La app móvil **nunca** se conecta a MySQL: habla con esta API. La contraseña de la base solo vive en el `.env`
 > del backend.
+
+### Arquitectura del backend
+
+Cada petición baja por capas, y cada capa solo llama a la siguiente:
+
+```
+routes → controllers → services → models → MySQL
+```
+
+| Carpeta (`Backend/src/`) | Responsabilidad |
+|---|---|
+| `routes/` | URL, permisos y límites de cada ruta. `index.js` reúne toda la API |
+| `controllers/` | Leen la petición, llaman al servicio y arman la respuesta HTTP |
+| `services/` | Reglas de negocio. Agrupados en `viajes/`, `documentos/` e `ia/`; a la raíz, los demás temas |
+| `models/` | Consultas SQL (el único lugar con SQL) |
+| `middlewares/` | Sesión y roles, límites de peticiones, carga de imágenes y manejo de errores |
+| `config/` | Conexión a la base de datos |
+| `utils/` | Utilidades compartidas (`HttpError`) |
+| `scripts/` | Tareas de mantenimiento que se ejecutan a mano |
+
+`Backend/test/rutas.test.js` comprueba que cada ruta exista y solo responda a los roles correctos (`pnpm test`, sin base de datos).
 
 ### Trabajo sin conexión
 

@@ -1,5 +1,5 @@
-import * as viajeModel from '../models/viajeModel.js';
-import * as flotaModel from '../models/flotaModel.js';
+import * as viajeModel from '../../models/viajeModel.js';
+import * as flotaModel from '../../models/flotaModel.js';
 
 const ROLES = {
   admin: 'admin',

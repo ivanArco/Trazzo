@@ -3,11 +3,11 @@
 import crypto from 'node:crypto';
 import os from 'node:os';
 import QRCode from 'qrcode';
-import * as viajeModel from '../models/viajeModel.js';
+import * as viajeModel from '../../models/viajeModel.js';
 import { estimar } from './rutaService.js';
-import { iaDisponible } from './asistenteService.js';
-import { pushDisponible, clavePublica, olvidarEnvio } from './notificacionService.js';
-import { HttpError } from '../utils/httpError.js';
+import { iaDisponible } from '../ia/asistenteService.js';
+import { pushDisponible, clavePublica, olvidarEnvio } from '../notificacionService.js';
+import { HttpError } from '../../utils/httpError.js';
 
 const TOKEN_VALIDO = /^[A-Za-z0-9_-]{43}$/;
 const HORAS_VISIBLE_TRAS_ENTREGA = 72;
@@ -88,6 +88,14 @@ const nombreDeOperador = (nombre) => {
   const [primero, apellido] = (nombre || '').trim().split(/\s+/);
   return primero ? `${primero}${apellido ? ` ${apellido[0]}.` : ''}` : null;
 };
+
+// El viaje de un enlace que sigue activo (vistaPublica valida el token y la caducidad)
+export async function viajeDelEnlace(token) {
+  await vistaPublica(token);
+  const viaje = await viajeModel.buscarPorToken(token);
+  if (!viaje) throw new HttpError(404, 'Este enlace de rastreo no existe o fue desactivado');
+  return viaje;
+}
 
 export async function vistaPublica(token) {
   if (!TOKEN_VALIDO.test(token || '')) throw new HttpError(404, 'Enlace de rastreo no válido');

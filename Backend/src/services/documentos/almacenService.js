@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 const CLAVE_VALIDA = /^[a-f0-9-]{36}\.(jpg|png|webp)$/;
 const tipoAlmacen = () => {

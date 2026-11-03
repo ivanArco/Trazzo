@@ -2,8 +2,8 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import pool from '../config/db.js';
-import * as almacen from '../services/almacenService.js';
-import { compararPreprocesamientos, cerrarTrabajadorOcr } from '../services/ocrService.js';
+import * as almacen from '../services/documentos/almacenService.js';
+import { compararPreprocesamientos, cerrarTrabajadorOcr } from '../services/documentos/ocrService.js';
 
 async function main() {
   const [documentos] = await pool.query(

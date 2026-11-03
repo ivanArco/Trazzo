@@ -1,5 +1,5 @@
-import * as viajeService from '../services/viajeService.js';
-import * as rastreoService from '../services/rastreoService.js';
+import * as viajeService from '../services/viajes/viajeService.js';
+import * as rastreoService from '../services/viajes/rastreoService.js';
 
 export const listar = async (req, res) => {
   res.json(await viajeService.listar(req.query, req.usuario));

@@ -1,4 +1,3 @@
-import * as flotaModel from '../models/flotaModel.js';
 import * as flotaService from '../services/flotaService.js';
 
 export const unidades = async (req, res) => {
@@ -14,5 +13,5 @@ export const actualizarUnidad = async (req, res) => {
 };
 
 export const operadores = async (req, res) => {
-  res.json(await flotaModel.listarOperadores());
+  res.json(await flotaService.listarOperadores());
 };

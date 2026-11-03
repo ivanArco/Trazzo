@@ -1,7 +1,7 @@
 import 'dotenv/config'; // primero: carga .env antes que el resto de módulos
 import app from './app.js';
-import { recuperarLecturasOcr } from './services/documentoService.js';
-import { iniciarSimulador } from './services/simuladorService.js';
+import { recuperarLecturasOcr } from './services/documentos/documentoService.js';
+import { iniciarSimulador } from './services/viajes/simuladorService.js';
 
 if (!process.env.JWT_SECRET) {
   console.error('Falta JWT_SECRET en el archivo .env (copia .env.example)');

@@ -3,9 +3,9 @@
 //   Traffic API → imágenes de la capa de tráfico (flujo e incidentes) para el mapa
 // La clave vive en .env (TOMTOM_API_KEY) y nunca sale del servidor: las imágenes pasan por aquí.
 // Para no agotar la cuota, cada viaje se consulta a lo más cada 5 minutos.
-import * as viajeModel from '../models/viajeModel.js';
+import * as viajeModel from '../../models/viajeModel.js';
 import { estimar } from './rutaService.js';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 const ROUTING = 'https://api.tomtom.com/routing/1/calculateRoute';
 const TILES = 'https://api.tomtom.com/traffic/map/4/tile';

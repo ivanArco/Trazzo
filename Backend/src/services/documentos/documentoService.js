@@ -1,12 +1,12 @@
 // Reglas de negocio de los documentos digitalizados:
 // validar la foto, guardarla, leerla con OCR, vincularla al viaje y llevar la revisión con su bitácora.
 import crypto from 'node:crypto';
-import { enTransaccion as transaccionReal } from '../config/db.js';
-import * as documentoModelReal from '../models/documentoModel.js';
-import * as viajeModelReal from '../models/viajeModel.js';
+import { enTransaccion as transaccionReal } from '../../config/db.js';
+import * as documentoModelReal from '../../models/documentoModel.js';
+import * as viajeModelReal from '../../models/viajeModel.js';
 import * as almacenReal from './almacenService.js';
 import * as ocrReal from './ocrService.js';
-import { HttpError } from '../utils/httpError.js';
+import { HttpError } from '../../utils/httpError.js';
 
 let enTransaccion = transaccionReal;
 let documentoModel = documentoModelReal;
