@@ -1,13 +1,14 @@
-// Seguimiento SIMULADO (solo de prueba): cada viaje asignado se inicia solo y termina en poco tiempo,
-// sin importar su distancia. Algunos pasan por una situación que los retrasa un momento.
-// Si el operador comparte el GPS de su teléfono, el viaje queda fuera de la simulación.
+// Seguimiento SIMULADO (solo de prueba): el viaje avanza de su inicio a su hora estimada de llegada (ETA).
+// Se inicia solo a su hora de salida, o antes si alguien lo inicia a mano. Algunos pasan por una situación que
+// los retrasa un momento. Si el operador comparte el GPS de su teléfono, el viaje queda fuera de la simulación.
 import { enTransaccion } from '../../config/db.js';
 import * as viajeModel from '../../models/viajeModel.js';
 import * as flotaModel from '../../models/flotaModel.js';
 import { avisarViaje, CERCA_DEL_DESTINO } from '../notificacionService.js';
 
-const DURACION_SEGUNDOS = Number(process.env.SIMULADOR_DURACION_SEG) || 20;
-const MAXIMO_ENTRE_VUELTAS = 2; // segundos: con viajes tan cortos, más tiempo no dejaría ver el avance
+const MINUTOS_SIN_RUTA = 300; // duración de un viaje cuya ruta no se pudo calcular
+// 1 = tiempo real. Con 60, cada hora de viaje tarda 1 minuto (útil para una demostración).
+const VELOCIDAD = Number(process.env.SIMULADOR_VELOCIDAD) || 1;
 
 // Cada viaje siempre tiene la misma situación, según su id. desde y hasta son fracciones del tiempo del viaje.
 const SITUACIONES = [
@@ -29,18 +30,26 @@ function fraccionRecorrida(tiempo, situacion) {
   return situacion.desde + (tiempo - situacion.hasta) * (1 - situacion.desde) / (1 - situacion.hasta);
 }
 
-export function calcularProgreso(viaje, ahora = Date.now(), duracionSegundos = DURACION_SEGUNDOS) {
-  const duracion = duracionSegundos * 1000;
+export function calcularProgreso(viaje, ahora = Date.now(), velocidad = VELOCIDAD) {
+  const salida = Number(viaje.salida_ms);
+  if (!Number.isFinite(salida)) return null;
   const iniciar = viaje.estado === 'asignado';
-  // Un viaje en curso sin registro de inicio ya es de antes: se da por terminado
-  const inicioGuardado = Number(viaje.inicio_ms);
-  const inicio = iniciar ? ahora : inicioGuardado > 0 ? inicioGuardado : ahora - duracion;
-  const eta = inicio + duracion;
+  if (iniciar && ahora < salida) return null;
+
+  // El tiempo corre desde que el viaje inició de verdad, aunque haya sido antes de su salida programada
+  const inicioReal = Number(viaje.inicio_ms);
+  const inicio = !iniciar && inicioReal > 0 ? inicioReal : salida;
+  const minutos = Number(viaje.duracion_min) > 0 ? Number(viaje.duracion_min) : MINUTOS_SIN_RUTA;
+  const etaPrevista = inicio + minutos * 60_000 / velocidad;
+  const etaGuardada = Number(viaje.eta_ms);
+  const etaValida = Number.isFinite(etaGuardada) && etaGuardada > inicio;
+  const eta = !etaValida ? etaPrevista : velocidad > 1 ? Math.min(etaGuardada, etaPrevista) : etaGuardada;
+
   const entregado = ahora >= eta;
   if (entregado) return { estado: 'entregado', avance: 100, eta, iniciar, entregado };
 
   const situacion = situacionDe(viaje.id);
-  const tiempo = (ahora - inicio) / duracion;
+  const tiempo = Math.max(0, (ahora - inicio) / (eta - inicio));
   const detenido = Boolean(situacion) && tiempo >= situacion.desde && tiempo < situacion.hasta;
   const calculado = Math.floor(fraccionRecorrida(tiempo, situacion) * 100);
   return {
@@ -55,7 +64,10 @@ export function calcularProgreso(viaje, ahora = Date.now(), duracionSegundos = D
 
 async function moverViaje(viaje, ahora = Date.now()) {
   if (viaje.gps_reciente) return;
+  // Un retraso que reportó una persona sigue hasta que esa persona retome el viaje
+  if (viaje.estado === 'retraso' && viaje.retraso_manual) return;
   const progreso = calcularProgreso(viaje, ahora);
+  if (!progreso) return;
 
   const etaSql = `FROM_UNIXTIME(${Math.floor(progreso.eta / 1000)})`;
   const campos = progreso.entregado
@@ -100,7 +112,6 @@ async function moverViaje(viaje, ahora = Date.now()) {
 
 export function iniciarSimulador(segundos) {
   if (!segundos) return;
-  const intervalo = Math.min(segundos, MAXIMO_ENTRE_VUELTAS);
   let ocupado = false;
 
   setInterval(async () => {
@@ -113,7 +124,7 @@ export function iniciarSimulador(segundos) {
     } finally {
       ocupado = false;
     }
-  }, intervalo * 1000);
+  }, segundos * 1000);
 
-  console.log(`Simulador activo: cada viaje termina en ${DURACION_SEGUNDOS} s (revisa cada ${intervalo} s)`);
+  console.log(`Simulador de seguimiento activo: avance según la ETA de cada viaje, cada ${segundos} s`);
 }

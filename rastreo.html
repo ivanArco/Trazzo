@@ -179,7 +179,7 @@
       </section>
     </div>
 
-    <p class="rastreo__pie">Se actualiza solo cada 3 segundos · Mapa © OpenStreetMap</p>
+    <p class="rastreo__pie">Se actualiza solo cada 15 segundos · Mapa © OpenStreetMap</p>
   </main>
 
   <script>
@@ -523,7 +523,7 @@
       if (continuar) setTimeout(function repetir() {
         if (document.hidden) return setTimeout(repetir, 5000);
         seguir();
-      }, 3000);
+      }, 15000);
     }
 
     window.addEventListener('load', seguir);

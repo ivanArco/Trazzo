@@ -788,15 +788,11 @@
       redirigir();
       if (protegerSecciones()) cargarSeccion();
 
-      // Seguimiento en vivo: cada 3 s se refresca lo que se está viendo (los viajes simulados duran segundos)
+      // Seguimiento en vivo: cada 10 s se refresca lo que se está viendo
       setInterval(() => {
         if (document.hidden || !navigator.onLine || !usuarioActual()) return;
-        if (['#tablero', '#monitoreo'].includes(location.hash)) cargarSeccion({ silencioso: true });
+        if (['#tablero', '#monitoreo', '#trafico'].includes(location.hash)) cargarSeccion({ silencioso: true });
         if ($('#dlg-viaje').open) refrescarDetalle();
-      }, 3000);
-      // Tráfico gasta el cupo de TomTom: sigue cada 10 s
-      setInterval(() => {
-        if (!document.hidden && navigator.onLine && usuarioActual() && location.hash === '#trafico') cargarSeccion({ silencioso: true });
       }, 10000);
     }
 
@@ -944,7 +940,7 @@
       const mostrarRutas = $('#mapa-capa-rutas').checked;
       const mostrarUnidades = $('#mapa-capa-unidades').checked;
       const colorVariable = (nombre) => getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
-      const colorBase = colorVariable('--line') || '#72809a';
+      const colorRuta = colorVariable('--accent') || '#e0a526';
       const visibles = viajesMapa.filter((viaje) => seleccionado === 'todas' || String(viaje.id) === seleccionado);
 
       visibles.forEach((viaje) => {
@@ -955,10 +951,12 @@
         const ubicacionSimulada = ubicarEnTrazo(viaje.trazo, viaje.avance_mapa ?? viaje.avance);
         const posicion = puntoGps || ubicacionSimulada?.posicion;
         if (!posicion) return;
-        const color = colorVariable(viaje.estado === 'retraso' ? '--alert' : '--go') || '#257a4b';
+        const color = colorVariable(viaje.estado === 'retraso' ? '--alert' : viaje.estado === 'pendiente' ? '--wait' : '--go') || '#257a4b';
 
         if (mostrarRutas && viaje.trazo?.length) {
-          L.polyline(viaje.trazo, { color: colorBase, weight: 4, opacity: .65 }).addTo(capaRutasUnidades);
+          L.polyline(viaje.trazo, { color: colorRuta, weight: 4, opacity: .85 })
+            .bindTooltip(`Ruta de ${viaje.folio}: ${ciudad(viaje.origen)} → ${ciudad(viaje.destino)}`)
+            .addTo(capaRutasUnidades);
           if (!puntoGps && ubicacionSimulada?.recorrido) {
             L.polyline(ubicacionSimulada.recorrido, { color, weight: 5, opacity: .95 }).addTo(capaRutasUnidades);
           }
@@ -966,10 +964,10 @@
 
         if (mostrarUnidades) {
           const popup = el('div', { class: 'mapa-popup' },
-            el('b', { text: `${viaje.folio} · ${viaje.placas || 'Unidad sin placas'}` }),
+            el('b', { text: `${viaje.folio} · ${viaje.placas || 'Sin unidad'}` }),
             el('p', { text: `${ciudad(viaje.origen)} → ${ciudad(viaje.destino)}` }),
-            el('p', { text: `${viaje.estado === 'retraso' ? 'Con retraso' : viaje.estado === 'asignado' ? 'Asignado' : 'En ruta'} · ${viaje.avance_mapa ?? viaje.avance}%` }),
-            el('p', { text: puntoGps ? `GPS del teléfono · precisión ±${Math.round(viaje.gps_precision_m || 0)} m` : 'Ubicación simulada' }),
+            el('p', { text: `${viaje.estado === 'retraso' ? 'Con retraso' : viaje.estado === 'pendiente' ? 'Pendiente de asignar' : viaje.estado === 'asignado' ? 'Asignado' : 'En ruta'} · ${viaje.avance_mapa ?? viaje.avance}%` }),
+            el('p', { text: puntoGps ? `GPS del teléfono · precisión ±${Math.round(viaje.gps_precision_m || 0)} m` : viaje.estado === 'pendiente' ? 'Aún no sale · ruta planeada' : 'Ubicación simulada' }),
             el('p', { text: etaTexto(viaje) }),
             el('button', { type: 'button', class: 'btn btn--ghost btn--sm', onclick: () => abrirDetalle(viaje.id), text: 'Ver detalle' }));
           L.circleMarker(posicion, {
@@ -1023,7 +1021,7 @@
         filtroRuta.replaceChildren(el('option', { value: 'todas', text: 'Todas las rutas' }),
           ...datos.map((viaje) => el('option', {
             value: viaje.id,
-            text: `${viaje.folio} · ${viaje.placas || 'Unidad'}`
+            text: `${viaje.folio} · ${viaje.placas || 'Sin unidad'}`
           })));
         filtroRuta.value = datos.some((viaje) => String(viaje.id) === anterior) ? anterior : 'todas';
 
@@ -1031,8 +1029,8 @@
         const fecha = fmtHora.format(new Date()).replace(/\./g, '');
         const gpsActivos = datos.filter((viaje) => viaje.gps_reciente).length;
         $('#mapa-texto').textContent = datos.length
-          ? `${datos.length} unidad${datos.length === 1 ? '' : 'es'} · ${gpsActivos} GPS real${gpsActivos === 1 ? '' : 'es'} · ${fecha}`
-          : 'Sin unidades asignadas activas';
+          ? `${datos.length} ruta${datos.length === 1 ? '' : 's'} · ${gpsActivos} GPS real${gpsActivos === 1 ? '' : 'es'} · ${fecha}`
+          : 'Sin viajes activos ni pendientes';
         $('#mapa-nota').textContent = conError.length
           ? `No se pudo trazar ${conError.map((viaje) => `${viaje.folio}: ${viaje.ruta_error}`).join(' · ')}. Las rutas pueden tardar al primer cálculo.`
           : 'Las rutas son por carretera (OpenStreetMap). Los operadores pueden compartir el GPS del teléfono durante un viaje; sin GPS reciente, se muestra la posición simulada.';
@@ -1256,7 +1254,7 @@
       const posicion = gps ? [gps.lat, gps.lon] : estimada.posicion;
 
       capaDetalle.clearLayers();
-      L.polyline(datos.trazo, { color: color('--line'), weight: 5, opacity: .9 }).addTo(capaDetalle);
+      L.polyline(datos.trazo, { color: color('--accent'), weight: 5, opacity: .85 }).bindTooltip('Ruta del viaje').addTo(capaDetalle);
       if (!gps) L.polyline(estimada.recorrido, { color: color('--go'), weight: 5 }).addTo(capaDetalle);
       if (datos.origen) L.circleMarker([datos.origen.lat, datos.origen.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color('--go'), fillOpacity: 1 }).bindTooltip(`Origen: ${ciudad(v.origen)}`).addTo(capaDetalle);
       if (datos.destino) L.circleMarker([datos.destino.lat, datos.destino.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color('--accent'), fillOpacity: 1 }).bindTooltip(`Destino: ${ciudad(v.destino)}`).addTo(capaDetalle);
@@ -1864,10 +1862,23 @@
       pintarMapaPanico(alerta);
     }
 
-    function pintarMapaPanico(alerta) {
+    let rutaPanico = { alerta: null, trazo: null };
+
+    async function rutaDeAlerta(alerta) {
+      if (rutaPanico.alerta === alerta.id && rutaPanico.trazo) return rutaPanico.trazo;
+      rutaPanico = { alerta: alerta.id, trazo: null };
+      if (!alerta.viaje_id || !window.L) return null;
+      try {
+        rutaPanico.trazo = (await api(`/viajes/${alerta.viaje_id}/mapa`)).trazo;
+      } catch { /* el mapa funciona sin la ruta */ }
+      return rutaPanico.trazo;
+    }
+
+    async function pintarMapaPanico(alerta) {
       const contenedor = $('#panico-mapa');
       const puntos = alerta.ubicaciones.map((u) => [u.lat, u.lon]);
-      contenedor.hidden = !puntos.length || !window.L;
+      const trazo = await rutaDeAlerta(alerta);
+      contenedor.hidden = (!puntos.length && !trazo?.length) || !window.L;
       if (contenedor.hidden) return;
 
       if (!mapaPanico) {
@@ -1882,14 +1893,16 @@
       const ultimo = puntos.at(-1);
       capaPanico?.remove();
       capaPanico = L.layerGroup([
-        L.polyline(puntos, { color: colorTema('--alert'), weight: 4, opacity: 0.8, dashArray: '4 6' }),
-        alerta.precision_m ? L.circle(ultimo, { radius: alerta.precision_m, color: colorTema('--alert'), weight: 1, fillOpacity: 0.15 }) : null,
-        L.circleMarker(ultimo, { radius: 9, color: '#fff', weight: 3, fillColor: colorTema('--alert'), fillOpacity: 1 })
-          .bindTooltip(`Última ubicación · ${hora(alerta.ubicacion_en)}`)
+        trazo?.length ? L.polyline(trazo, { color: colorTema('--accent'), weight: 4, opacity: 0.85 }).bindTooltip('Ruta del viaje') : null,
+        puntos.length ? L.polyline(puntos, { color: colorTema('--alert'), weight: 4, opacity: 0.8, dashArray: '4 6' }) : null,
+        ultimo && alerta.precision_m ? L.circle(ultimo, { radius: alerta.precision_m, color: colorTema('--alert'), weight: 1, fillOpacity: 0.15 }) : null,
+        ultimo ? L.circleMarker(ultimo, { radius: 9, color: '#fff', weight: 3, fillColor: colorTema('--alert'), fillOpacity: 1 })
+          .bindTooltip(`Última ubicación · ${hora(alerta.ubicacion_en)}`) : null
       ].filter(Boolean)).addTo(mapaPanico);
 
       if (alertaPanicoEncuadrada !== alerta.id) {
-        if (puntos.length > 1) mapaPanico.fitBounds(L.latLngBounds(puntos), { padding: [30, 30], maxZoom: 16 });
+        const encuadre = [...(trazo || []), ...puntos];
+        if (encuadre.length > 1) mapaPanico.fitBounds(L.latLngBounds(encuadre), { padding: [30, 30], maxZoom: 16 });
         else mapaPanico.setView(ultimo, 15);
         alertaPanicoEncuadrada = alerta.id;
       }

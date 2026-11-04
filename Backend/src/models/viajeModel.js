@@ -51,8 +51,8 @@ export const viajesParaMapa = async (operadorId) => {
             v.gps_latitud, v.gps_longitud, v.gps_precision_m,
             (v.gps_actualizado_en >= NOW() - INTERVAL 2 MINUTE) AS gps_reciente
      ${TABLAS_VIAJE}
-     WHERE v.estado IN ('asignado', 'en_ruta', 'retraso') AND v.unidad_id IS NOT NULL ${filtroOperador}
-     ORDER BY FIELD(v.estado, 'retraso', 'en_ruta', 'asignado'), v.salida
+     WHERE (v.estado = 'pendiente' OR (v.estado IN ('asignado', 'en_ruta', 'retraso') AND v.unidad_id IS NOT NULL)) ${filtroOperador}
+     ORDER BY FIELD(v.estado, 'retraso', 'en_ruta', 'asignado', 'pendiente'), v.salida
      LIMIT 100`,
     valores
   );
@@ -256,6 +256,8 @@ export const viajesEnMovimiento = async () => {
             UNIX_TIMESTAMP(eta) * 1000 AS eta_ms,
             (SELECT UNIX_TIMESTAMP(MIN(e.creado_en)) * 1000 FROM eventos_viaje e
               WHERE e.viaje_id = viajes.id AND e.tipo = 'en_ruta') AS inicio_ms,
+            (SELECT e.usuario_id IS NOT NULL FROM eventos_viaje e
+              WHERE e.viaje_id = viajes.id AND e.tipo = 'retraso' ORDER BY e.id DESC LIMIT 1) AS retraso_manual,
             (gps_actualizado_en >= NOW() - INTERVAL 2 MINUTE) AS gps_reciente
      FROM viajes
      WHERE unidad_id IS NOT NULL
