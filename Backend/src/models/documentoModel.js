@@ -88,6 +88,15 @@ export const registrarErrorOcr = async (id, mensaje, conexion = pool) => {
   await conexion.execute('UPDATE documentos SET ocr_estado = ?, ocr_error = ? WHERE id = ?', ['error', mensaje, id]);
 };
 
+// Los documentos que fallaron por una clave de Anthropic inválida se vuelven a leer
+export const reintentarFallidosPorClave = async () => {
+  const [r] = await pool.query(
+    `UPDATE documentos SET ocr_estado = 'procesando', ocr_error = NULL
+     WHERE ocr_estado = 'error' AND (ocr_error LIKE '%authentication_error%' OR ocr_error LIKE '%x-api-key%')`
+  );
+  return r.affectedRows;
+};
+
 export const pendientesOcr = async () => {
   const [rows] = await pool.query(
     `SELECT d.id, d.viaje_id, d.subido_por, d.archivo_clave, d.mime, d.sha256, v.folio

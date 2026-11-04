@@ -503,6 +503,7 @@ export async function recuperarLecturasOcr() {
   if (await documentoModel.asegurarEstadoOcr()) {
     console.log('✔ Columna agregada automáticamente: documentos.ocr_estado');
   }
+  await documentoModel.reintentarFallidosPorClave();
   const pendientes = await documentoModel.pendientesOcr();
   pendientes.forEach((doc) => programarOcr(doc, { usuarioId: doc.subido_por }));
   return pendientes.length;

@@ -3,6 +3,7 @@
 //     Los datos (guía, fecha, receptor, monto) y el tipo se obtienen con reglas sobre ese texto.
 //   · claude (de pago, más preciso): una sola llamada lee, extrae campos y clasifica.
 // Se elige solo: si hay ANTHROPIC_API_KEY usa Claude; si no, Tesseract. Se puede forzar con OCR_MOTOR=tesseract|claude.
+// Si Claude rechaza la petición (clave inválida, sin saldo, servicio caído), el documento se lee con Tesseract.
 import os from 'node:os';
 import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
@@ -341,14 +342,30 @@ async function leerConClaude(buffer, mime) {
 
 /* =====================  Punto de entrada  ===================== */
 
+// Con una clave rechazada no se vuelve a intentar con Claude hasta reiniciar el servidor
+let claveRechazada = false;
+
 export function elegirMotor() {
+  if (claveRechazada) return 'tesseract';
   const forzado = (process.env.OCR_MOTOR || '').toLowerCase();
   if (forzado === 'claude' || forzado === 'tesseract') return forzado;
   return cliente || process.env.ANTHROPIC_API_KEY ? 'claude' : 'tesseract';
 }
 
-export async function leerDocumento(buffer, mime) {
-  return elegirMotor() === 'claude' ? leerConClaude(buffer, mime) : leerConTesseract(buffer);
+export async function leerDocumento(buffer, mime, { respaldo = leerConTesseract } = {}) {
+  if (elegirMotor() !== 'claude') return respaldo(buffer);
+  try {
+    return await leerConClaude(buffer, mime);
+  } catch (error) {
+    if (!(error instanceof Anthropic.APIError)) throw error;
+    if ([401, 403].includes(error.status)) {
+      claveRechazada = true;
+      console.error('OCR: Anthropic rechazó la clave (revisa ANTHROPIC_API_KEY); se usará Tesseract');
+    } else {
+      console.error(`OCR: Claude no disponible (${error.status ?? 'sin conexión'}); este documento se lee con Tesseract`);
+    }
+    return respaldo(buffer);
+  }
 }
 
 export function informacionMotor() {
