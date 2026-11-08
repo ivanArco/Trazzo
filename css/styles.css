@@ -2561,6 +2561,16 @@ body:has(.screen:target) .login {
   background: var(--panel-2);
 }
 .doc-bloqueo { color: var(--info); font-size: .88rem; overflow-wrap: anywhere; }
+.doc-discrepancia {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 4px solid var(--alert);
+  border-radius: 6px;
+  color: var(--alert);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  background: var(--panel-2);
+}
 .doc-ocr-details { margin-bottom: 10px; }
 .doc-ocr-details summary { cursor: pointer; color: var(--info); }
 .doc-aviso-calidad { margin: 12px 0; color: var(--wait); }
@@ -2579,7 +2589,14 @@ body:has(.screen:target) .login {
 .doc-review { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 22px; min-height: 0; padding: 18px 22px; overflow: auto; }
 .doc-review__foto { position: sticky; top: 0; align-self: start; min-width: 0; }
 .doc-review__contenido { min-width: 0; }
-.doc-imagen { display: block; width: 100%; max-height: calc(100dvh - 250px); object-fit: contain; border-radius: 10px; background: var(--panel-2); }
+.doc-imagen-herramientas { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 8px; }
+.doc-imagen-herramientas[hidden], .doc-imagen-marco[hidden] { display: none; }
+.doc-imagen-herramientas output { min-width: 4ch; color: var(--muted); font-size: .85rem; text-align: center; }
+.doc-imagen-marco { max-height: calc(100dvh - 290px); overflow: hidden; border-radius: 10px; background: var(--panel-2); }
+.doc-imagen-marco:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.doc-imagen { display: block; width: 100%; max-height: calc(100dvh - 290px); object-fit: contain; border-radius: 10px; user-select: none; touch-action: pan-y; transform-origin: center; }
+.doc-imagen-marco--ampliado .doc-imagen { cursor: grab; touch-action: none; }
+.doc-imagen-marco--ampliado .doc-imagen:active { cursor: grabbing; }
 .doc-dialog__actions { position: sticky; bottom: 0; z-index: 2; display: grid; gap: 10px; padding: 12px 22px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--panel); }
 .doc-dialog__nota { max-width: 620px; }
 .doc-dialog__nota .f { gap: 4px; }
@@ -2968,6 +2985,10 @@ body:has(.screen:target) .login {
 
   .doc-review__foto .doc-imagen {
     min-height: 0;
+    max-height: min(22dvh, 180px);
+  }
+
+  .doc-review__foto .doc-imagen-marco {
     max-height: min(22dvh, 180px);
   }
 

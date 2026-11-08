@@ -2567,6 +2567,9 @@
     let paginaDocumentos = 1;
     let documentoActual = null;
     let urlImagenDocumento = null;
+    let zoomImagenDocumento = 1;
+    let desplazamientoImagenDocumento = { x: 0, y: 0 };
+    let arrastreImagenDocumento = null;
     let temporizadorOcrDocumentos = null;
     let temporizadorListaViaje = null;
     let miniaturasDocumentos = [];
@@ -2654,6 +2657,12 @@
         try { datos = JSON.parse(datos); } catch { datos = {}; }
       }
       const esIdentificacion = doc.tipo === 'identificacion';
+      const discrepancia = DOC_TIPOS_COMPARABLES.has(doc.tipo) && doc.coincide_viaje === false;
+      const avisoDiscrepancia = $('#doc-discrepancia');
+      avisoDiscrepancia.hidden = !discrepancia;
+      avisoDiscrepancia.textContent = discrepancia
+        ? `El documento no coincide con el viaje asociado. Viaje: ${doc.folio || 'sin folio'} · Guía extraída: ${doc.numero_guia || 'no detectada'}. Verifica la evidencia; si apruebas el documento, justifica la discrepancia en la nota.`
+        : '';
       const campos = [
         ['Tipo', DOC_TIPOS[doc.tipo] || doc.tipo || 'Sin dato'],
         ['Estado', DOC_ESTADOS[doc.estado]?.texto || doc.estado || 'Sin dato'],
@@ -3031,6 +3040,359 @@
       return respuesta.blob();
     }
 
+    function actualizarZoomImagen() {
+      const imagen = $('#doc-imagen');
+      const marco = $('#doc-imagen-marco');
+      const maxX = Math.max(0, (imagen.offsetWidth * zoomImagenDocumento - marco.clientWidth) / 2);
+      const maxY = Math.max(0, (imagen.offsetHeight * zoomImagenDocumento - marco.clientHeight) / 2);
+      desplazamientoImagenDocumento.x = Math.max(-maxX, Math.min(maxX, desplazamientoImagenDocumento.x));
+      desplazamientoImagenDocumento.y = Math.max(-maxY, Math.min(maxY, desplazamientoImagenDocumento.y));
+      imagen.style.transform = `translate(${desplazamientoImagenDocumento.x}px, ${desplazamientoImagenDocumento.y}px) scale(${zoomImagenDocumento})`;
+      $('#doc-zoom-nivel').textContent = `${Math.round(zoomImagenDocumento * 100)}%`;
+      $('#doc-zoom-alejar').disabled = zoomImagenDocumento <= 1;
+      $('#doc-zoom-acercar').disabled = zoomImagenDocumento >= 5;
+      $('#doc-zoom-restablecer').disabled = zoomImagenDocumento === 1;
+      marco.classList.toggle('doc-imagen-marco--ampliado', zoomImagenDocumento > 1);
+    }
+
+    function cambiarZoomImagen(incremento) {
+      const nuevoZoom = Math.max(1, Math.min(5, Math.round((zoomImagenDocumento + incremento) * 100) / 100));
+      if (nuevoZoom === zoomImagenDocumento) return;
+      zoomImagenDocumento = nuevoZoom;
+      if (zoomImagenDocumento === 1) desplazamientoImagenDocumento = { x: 0, y: 0 };
+      actualizarZoomImagen();
+    }
+
+    function restablecerZoomImagen() {
+      zoomImagenDocumento = 1;
+      desplazamientoImagenDocumento = { x: 0, y: 0 };
+      actualizarZoomImagen();
+    }
+
+    function detectarEsquinasDocumento(canvas) {
+      const limite = 720;
+      const escala = Math.min(1, limite / Math.max(canvas.width, canvas.height));
+      const ancho = Math.max(1, Math.round(canvas.width * escala));
+      const alto = Math.max(1, Math.round(canvas.height * escala));
+      const analisis = document.createElement('canvas');
+      analisis.width = ancho;
+      analisis.height = alto;
+      const contexto = analisis.getContext('2d', { willReadFrequently: true });
+      contexto.drawImage(canvas, 0, 0, ancho, alto);
+      const { data } = contexto.getImageData(0, 0, ancho, alto);
+      const total = ancho * alto;
+      const gris = new Uint8Array(total);
+      const histograma = new Uint32Array(256);
+      for (let i = 0; i < total; i++) {
+        const indice = i * 4;
+        const valor = Math.round(data[indice] * 0.299 + data[indice + 1] * 0.587 + data[indice + 2] * 0.114);
+        gris[i] = valor;
+        histograma[valor]++;
+      }
+
+      let sumaTotal = 0;
+      for (let i = 0; i < 256; i++) sumaTotal += i * histograma[i];
+      let sumaFondo = 0;
+      let pesoFondo = 0;
+      let mejorVarianza = 0;
+      let umbral = 0;
+      for (let i = 0; i < 256; i++) {
+        pesoFondo += histograma[i];
+        if (!pesoFondo) continue;
+        const pesoObjeto = total - pesoFondo;
+        if (!pesoObjeto) break;
+        sumaFondo += i * histograma[i];
+        const diferencia = sumaFondo / pesoFondo - (sumaTotal - sumaFondo) / pesoObjeto;
+        const varianza = pesoFondo * pesoObjeto * diferencia * diferencia;
+        if (varianza > mejorVarianza) {
+          mejorVarianza = varianza;
+          umbral = i;
+        }
+      }
+
+      let mejorContorno = null;
+      const ajustes = [0, -16, 16, -32, 32, -48, 48];
+      for (const ajuste of ajustes) {
+        const umbralActual = Math.max(0, Math.min(254, umbral + ajuste));
+        const visitado = new Uint8Array(total);
+        const cola = new Int32Array(total);
+        let mayor = null;
+        for (let inicio = 0; inicio < total; inicio++) {
+          if (visitado[inicio] || gris[inicio] <= umbralActual) continue;
+          let cabeza = 0;
+          let colaFin = 0;
+          cola[colaFin++] = inicio;
+          visitado[inicio] = 1;
+          let minimoSuma = Infinity;
+          let maximoSuma = -Infinity;
+          let minimoResta = Infinity;
+          let maximoResta = -Infinity;
+          let puntoMinimoSuma;
+          let puntoMaximoSuma;
+          let puntoMinimoResta;
+          let puntoMaximoResta;
+          let tocaBorde = false;
+          while (cabeza < colaFin) {
+            const indice = cola[cabeza++];
+            const x = indice % ancho;
+            const y = Math.floor(indice / ancho);
+            if (x === 0 || y === 0 || x === ancho - 1 || y === alto - 1) tocaBorde = true;
+            const suma = x + y;
+            const resta = x - y;
+            if (suma < minimoSuma) { minimoSuma = suma; puntoMinimoSuma = { x, y }; }
+            if (suma > maximoSuma) { maximoSuma = suma; puntoMaximoSuma = { x, y }; }
+            if (resta < minimoResta) { minimoResta = resta; puntoMinimoResta = { x, y }; }
+            if (resta > maximoResta) { maximoResta = resta; puntoMaximoResta = { x, y }; }
+            if (x > 0 && !visitado[indice - 1] && gris[indice - 1] > umbralActual) {
+              visitado[indice - 1] = 1;
+              cola[colaFin++] = indice - 1;
+            }
+            if (x + 1 < ancho && !visitado[indice + 1] && gris[indice + 1] > umbralActual) {
+              visitado[indice + 1] = 1;
+              cola[colaFin++] = indice + 1;
+            }
+            if (y > 0 && !visitado[indice - ancho] && gris[indice - ancho] > umbralActual) {
+              visitado[indice - ancho] = 1;
+              cola[colaFin++] = indice - ancho;
+            }
+            if (y + 1 < alto && !visitado[indice + ancho] && gris[indice + ancho] > umbralActual) {
+              visitado[indice + ancho] = 1;
+              cola[colaFin++] = indice + ancho;
+            }
+          }
+          if (!tocaBorde && (!mayor || colaFin > mayor.area)) {
+            mayor = { area: colaFin, puntoMinimoSuma, puntoMaximoSuma, puntoMinimoResta, puntoMaximoResta };
+          }
+        }
+
+        if (!mayor || mayor.area < total * 0.12) continue;
+        const puntos = [
+          mayor.puntoMinimoSuma, mayor.puntoMaximoResta,
+          mayor.puntoMaximoSuma, mayor.puntoMinimoResta
+        ];
+        let orientacion = 0;
+        let valido = true;
+        for (let i = 0; i < puntos.length; i++) {
+          const a = puntos[i];
+          const b = puntos[(i + 1) % puntos.length];
+          const c = puntos[(i + 2) % puntos.length];
+          const giro = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+          if (Math.abs(giro) < 1 || (orientacion && Math.sign(giro) !== orientacion)) {
+            valido = false;
+            break;
+          }
+          orientacion = Math.sign(giro);
+        }
+        if (!valido) continue;
+        puntos.forEach((punto) => { punto.x /= escala; punto.y /= escala; });
+        const area = Math.abs(puntos.reduce((suma, punto, i) => {
+          const siguiente = puntos[(i + 1) % puntos.length];
+          return suma + punto.x * siguiente.y - siguiente.x * punto.y;
+        }, 0)) / 2;
+        const proporcionArea = area / (canvas.width * canvas.height);
+        if (proporcionArea < 0.1 || proporcionArea > 0.92) continue;
+        const anchoHoja = Math.max(
+          Math.hypot(puntos[1].x - puntos[0].x, puntos[1].y - puntos[0].y),
+          Math.hypot(puntos[2].x - puntos[3].x, puntos[2].y - puntos[3].y)
+        );
+        const altoHoja = Math.max(
+          Math.hypot(puntos[3].x - puntos[0].x, puntos[3].y - puntos[0].y),
+          Math.hypot(puntos[2].x - puntos[1].x, puntos[2].y - puntos[1].y)
+        );
+        const proporcionLados = Math.min(anchoHoja, altoHoja) / Math.max(anchoHoja, altoHoja);
+        if (proporcionLados < 0.32 || proporcionLados > 0.98) continue;
+        if (!mejorContorno || area > mejorContorno.area) mejorContorno = { area, puntos };
+      }
+      return mejorContorno?.puntos || null;
+    }
+
+    function resolverHomografia(origen, destino) {
+      const matriz = [];
+      for (let i = 0; i < 4; i++) {
+        const { x, y } = destino[i];
+        const { x: u, y: v } = origen[i];
+        matriz.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]);
+        matriz.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
+      }
+      for (let columna = 0; columna < 8; columna++) {
+        let pivote = columna;
+        for (let fila = columna + 1; fila < 8; fila++) {
+          if (Math.abs(matriz[fila][columna]) > Math.abs(matriz[pivote][columna])) pivote = fila;
+        }
+        if (Math.abs(matriz[pivote][columna]) < 1e-10) throw new Error('No se pudo corregir la perspectiva de la foto.');
+        [matriz[columna], matriz[pivote]] = [matriz[pivote], matriz[columna]];
+        const divisor = matriz[columna][columna];
+        for (let j = columna; j <= 8; j++) matriz[columna][j] /= divisor;
+        for (let fila = 0; fila < 8; fila++) {
+          if (fila === columna) continue;
+          const factor = matriz[fila][columna];
+          for (let j = columna; j <= 8; j++) matriz[fila][j] -= factor * matriz[columna][j];
+        }
+      }
+      return matriz.map((fila) => fila[8]);
+    }
+
+    function crearImagenEscaneada(imagen) {
+      const maximo = 1800;
+      const escala = Math.min(1, maximo / Math.max(imagen.naturalWidth, imagen.naturalHeight));
+      const fuente = document.createElement('canvas');
+      fuente.width = Math.max(1, Math.round(imagen.naturalWidth * escala));
+      fuente.height = Math.max(1, Math.round(imagen.naturalHeight * escala));
+      const contextoFuente = fuente.getContext('2d', { willReadFrequently: true });
+      contextoFuente.drawImage(imagen, 0, 0, fuente.width, fuente.height);
+
+      const esquinasDetectadas = detectarEsquinasDocumento(fuente);
+      const origen = esquinasDetectadas || [
+        { x: 0, y: 0 }, { x: fuente.width, y: 0 },
+        { x: fuente.width, y: fuente.height }, { x: 0, y: fuente.height }
+      ];
+      const ancho = Math.max(
+        Math.hypot(origen[1].x - origen[0].x, origen[1].y - origen[0].y),
+        Math.hypot(origen[2].x - origen[3].x, origen[2].y - origen[3].y)
+      );
+      const alto = Math.max(
+        Math.hypot(origen[3].x - origen[0].x, origen[3].y - origen[0].y),
+        Math.hypot(origen[2].x - origen[1].x, origen[2].y - origen[1].y)
+      );
+      const salida = document.createElement('canvas');
+      salida.width = Math.max(1, Math.round(ancho));
+      salida.height = Math.max(1, Math.round(alto));
+      const mapa = resolverHomografia(origen, [
+        { x: 0, y: 0 }, { x: salida.width, y: 0 },
+        { x: salida.width, y: salida.height }, { x: 0, y: salida.height }
+      ]);
+      const pixelesOrigen = contextoFuente.getImageData(0, 0, fuente.width, fuente.height).data;
+      const contextoSalida = salida.getContext('2d', { willReadFrequently: true });
+      const imagenSalida = contextoSalida.createImageData(salida.width, salida.height);
+      const pixelesSalida = imagenSalida.data;
+      for (let y = 0; y < salida.height; y++) {
+        for (let x = 0; x < salida.width; x++) {
+          const denominador = mapa[6] * x + mapa[7] * y + 1;
+          const sx = (mapa[0] * x + mapa[1] * y + mapa[2]) / denominador;
+          const sy = (mapa[3] * x + mapa[4] * y + mapa[5]) / denominador;
+          const x0 = Math.max(0, Math.min(fuente.width - 1, Math.floor(sx)));
+          const y0 = Math.max(0, Math.min(fuente.height - 1, Math.floor(sy)));
+          const x1 = Math.min(fuente.width - 1, x0 + 1);
+          const y1 = Math.min(fuente.height - 1, y0 + 1);
+          const fx = Math.max(0, Math.min(1, sx - x0));
+          const fy = Math.max(0, Math.min(1, sy - y0));
+          const destino = (y * salida.width + x) * 4;
+          for (let canal = 0; canal < 3; canal++) {
+            const arriba = pixelesOrigen[(y0 * fuente.width + x0) * 4 + canal] * (1 - fx)
+              + pixelesOrigen[(y0 * fuente.width + x1) * 4 + canal] * fx;
+            const abajo = pixelesOrigen[(y1 * fuente.width + x0) * 4 + canal] * (1 - fx)
+              + pixelesOrigen[(y1 * fuente.width + x1) * 4 + canal] * fx;
+            pixelesSalida[destino + canal] = arriba * (1 - fy) + abajo * fy;
+          }
+          pixelesSalida[destino + 3] = 255;
+        }
+      }
+      contextoSalida.putImageData(imagenSalida, 0, 0);
+
+      const datos = contextoSalida.getImageData(0, 0, salida.width, salida.height);
+      const niveles = new Uint32Array(256);
+      for (let i = 0; i < datos.data.length; i += 4) {
+        const gris = Math.round(datos.data[i] * 0.299 + datos.data[i + 1] * 0.587 + datos.data[i + 2] * 0.114);
+        niveles[gris]++;
+      }
+      const cantidad = salida.width * salida.height;
+      const percentil = (objetivo) => {
+        let cuenta = 0;
+        for (let i = 0; i < 256; i++) {
+          cuenta += niveles[i];
+          if (cuenta >= objetivo) return i;
+        }
+        return 255;
+      };
+      const negro = percentil(cantidad * 0.02);
+      const blanco = Math.max(negro + 1, percentil(cantidad * 0.98));
+      const rango = blanco - negro;
+      for (let i = 0; i < datos.data.length; i += 4) {
+        const gris = Math.round(datos.data[i] * 0.299 + datos.data[i + 1] * 0.587 + datos.data[i + 2] * 0.114);
+        const valor = Math.max(0, Math.min(255, Math.round((gris - negro) * 255 / rango)));
+        datos.data[i] = valor;
+        datos.data[i + 1] = valor;
+        datos.data[i + 2] = valor;
+      }
+      contextoSalida.putImageData(datos, 0, 0);
+      return { canvas: salida, detectado: Boolean(esquinasDetectadas) };
+    }
+
+    async function imprimirImagenDocumento() {
+      if (!urlImagenDocumento) {
+        mostrarAviso('No hay una imagen disponible para imprimir.');
+        return;
+      }
+
+      const boton = $('#doc-imprimir');
+      boton.disabled = true;
+      boton.setAttribute('aria-busy', 'true');
+      let urlEscaneada;
+      let marco;
+      try {
+        await new Promise((resolver) => requestAnimationFrame(resolver));
+        const escaneo = crearImagenEscaneada($('#doc-imagen'));
+        if (!escaneo.detectado) {
+          mostrarAviso('No se detectaron los bordes de la hoja; se imprimirá la imagen completa con contraste mejorado.');
+        }
+        const blob = await new Promise((resolver, rechazar) => {
+          escaneo.canvas.toBlob((resultado) => resultado ? resolver(resultado) : rechazar(new Error('No se pudo preparar la imagen para imprimir.')), 'image/jpeg', 0.94);
+        });
+        urlEscaneada = URL.createObjectURL(blob);
+        marco = document.createElement('iframe');
+        marco.title = 'Vista de impresión del comprobante escaneado';
+        marco.style.cssText = 'position:fixed;width:1px;height:1px;left:-10px;bottom:0;border:0;opacity:0;';
+        marco.onload = () => {
+          const documento = marco.contentDocument;
+          if (!documento) {
+            URL.revokeObjectURL(urlEscaneada);
+            marco.remove();
+            mostrarAviso('No se pudo preparar la impresión del comprobante.');
+            return;
+          }
+
+          const imagen = documento.createElement('img');
+          imagen.alt = 'Comprobante escaneado';
+          imagen.addEventListener('load', () => {
+            const vertical = imagen.naturalHeight >= imagen.naturalWidth;
+            const anchoPagina = vertical ? '186mm' : '273mm';
+            const altoPagina = vertical ? '273mm' : '186mm';
+            const estilo = documento.createElement('style');
+            estilo.textContent = `
+              @page { size: A4 ${vertical ? 'portrait' : 'landscape'}; margin: 12mm; }
+              html, body { width: ${anchoPagina}; height: ${altoPagina}; margin: 0; }
+              body { display: grid; place-items: center; }
+              img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+            `;
+            documento.head.replaceChildren(estilo);
+            marco.contentWindow.addEventListener('afterprint', () => {
+              URL.revokeObjectURL(urlEscaneada);
+              marco.remove();
+            }, { once: true });
+            marco.contentWindow.focus();
+            marco.contentWindow.print();
+          }, { once: true });
+          imagen.addEventListener('error', () => {
+            URL.revokeObjectURL(urlEscaneada);
+            marco.remove();
+            mostrarAviso('No se pudo cargar la imagen procesada para imprimir.');
+          }, { once: true });
+          documento.title = `${$('#doc-titulo').textContent} · Trazzo`;
+          documento.body.replaceChildren(imagen);
+          imagen.src = urlEscaneada;
+        };
+        marco.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
+        document.body.append(marco);
+      } catch (error) {
+        if (urlEscaneada) URL.revokeObjectURL(urlEscaneada);
+        if (marco) marco.remove();
+        mostrarAviso(`No se pudo procesar la imagen para imprimir: ${error.message}`);
+      } finally {
+        boton.disabled = false;
+        boton.removeAttribute('aria-busy');
+      }
+    }
+
     async function abrirDocumento(id) {
       try {
         const doc = await api(`/documentos/${id}`);
@@ -3047,7 +3409,10 @@
         $('#doc-titulo').textContent = `${doc.folio || 'Documento'} · ${DOC_TIPOS[doc.tipo] || doc.tipo || 'Sin clasificar'}`;
         $('#doc-subtitulo').textContent = `Subido por ${doc.subio || '—'}`;
         $('#doc-imagen').hidden = !imagen;
+        $('#doc-imagen-herramientas').hidden = !imagen;
+        $('#doc-imagen-marco').hidden = !imagen;
         $('#doc-foto-no-disponible').hidden = Boolean(imagen);
+        restablecerZoomImagen();
         if (imagen) $('#doc-imagen').src = urlImagenDocumento;
         $('#doc-nota').value = doc.nota_revision || '';
         actualizarDetalleDocumento(doc);
@@ -3372,6 +3737,46 @@
       $('#doc-corr-fecha').addEventListener('input', (e) => {
         e.currentTarget.value = e.currentTarget.value.replace(/[^\d/]/g, '').slice(0, 10);
       });
+      $('#doc-zoom-alejar').addEventListener('click', () => cambiarZoomImagen(-0.25));
+      $('#doc-zoom-acercar').addEventListener('click', () => cambiarZoomImagen(0.25));
+      $('#doc-zoom-restablecer').addEventListener('click', restablecerZoomImagen);
+      $('#doc-imprimir').addEventListener('click', imprimirImagenDocumento);
+      $('#doc-imagen-marco').addEventListener('wheel', (evento) => {
+        evento.preventDefault();
+        cambiarZoomImagen(evento.deltaY < 0 ? 0.25 : -0.25);
+      }, { passive: false });
+      $('#doc-imagen-marco').addEventListener('keydown', (evento) => {
+        if (evento.key === '+' || evento.key === '=') {
+          evento.preventDefault();
+          cambiarZoomImagen(0.25);
+        } else if (evento.key === '-') {
+          evento.preventDefault();
+          cambiarZoomImagen(-0.25);
+        } else if (evento.key === '0') {
+          evento.preventDefault();
+          restablecerZoomImagen();
+        }
+      });
+      $('#doc-imagen').addEventListener('pointerdown', (evento) => {
+        if (zoomImagenDocumento <= 1 || evento.button !== 0) return;
+        arrastreImagenDocumento = {
+          x: evento.clientX,
+          y: evento.clientY,
+          desplazamientoX: desplazamientoImagenDocumento.x,
+          desplazamientoY: desplazamientoImagenDocumento.y
+        };
+        evento.currentTarget.setPointerCapture(evento.pointerId);
+      });
+      $('#doc-imagen').addEventListener('pointermove', (evento) => {
+        if (!arrastreImagenDocumento) return;
+        desplazamientoImagenDocumento = {
+          x: arrastreImagenDocumento.desplazamientoX + evento.clientX - arrastreImagenDocumento.x,
+          y: arrastreImagenDocumento.desplazamientoY + evento.clientY - arrastreImagenDocumento.y
+        };
+        actualizarZoomImagen();
+      });
+      $('#doc-imagen').addEventListener('pointerup', () => { arrastreImagenDocumento = null; });
+      $('#doc-imagen').addEventListener('pointercancel', () => { arrastreImagenDocumento = null; });
       $('#dv-escanear').addEventListener('click', iniciarEscanerDocumento);
       $('#doc-abrir-camara').addEventListener('click', async (e) => {
         const boton = e.currentTarget;
@@ -3444,7 +3849,11 @@
         urlImagenDocumento = null;
         $('#doc-imagen').removeAttribute('src');
         $('#doc-imagen').hidden = true;
+        $('#doc-imagen-herramientas').hidden = true;
+        $('#doc-imagen-marco').hidden = true;
         $('#doc-foto-no-disponible').hidden = true;
+        restablecerZoomImagen();
+        arrastreImagenDocumento = null;
         documentoActual = null;
         valoresInicialesDocumento = '';
         $('#doc-bitacora').replaceChildren(el('li', {}, el('small', { text: 'Selecciona Actualizar para consultar la bitácora.' })));

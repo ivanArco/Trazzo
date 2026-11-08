@@ -28,7 +28,16 @@
     </header>
     <div class="doc-review">
       <aside class="doc-review__foto">
-        <img id="doc-imagen" class="doc-imagen" alt="Imagen del comprobante">
+        <div class="doc-imagen-herramientas" id="doc-imagen-herramientas" role="group" aria-label="Controles de la imagen" hidden>
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-zoom-alejar" aria-label="Alejar imagen">−</button>
+          <output id="doc-zoom-nivel" aria-live="polite">100%</output>
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-zoom-acercar" aria-label="Acercar imagen">+</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-zoom-restablecer">Restablecer</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="doc-imprimir">Imprimir</button>
+        </div>
+        <div class="doc-imagen-marco" id="doc-imagen-marco" tabindex="0" aria-label="Imagen del comprobante. Usa los controles para acercar, la rueda del ratón para cambiar el zoom y arrastra para desplazarte." hidden>
+          <img id="doc-imagen" class="doc-imagen" alt="Imagen del comprobante" draggable="false">
+        </div>
         <p id="doc-foto-no-disponible" class="doc-placeholder" role="status" hidden>Archivo no disponible</p>
       </aside>
       <section class="doc-review__contenido">
@@ -39,6 +48,7 @@
           <button type="button" role="tab" data-doc-panel="bitacora" aria-selected="false" id="doc-tab-bitacora">Bitácora</button>
         </nav>
         <section id="doc-panel-datos" data-doc-panel-content="datos">
+          <p class="doc-discrepancia" id="doc-discrepancia" role="alert" hidden></p>
           <dl class="kv" id="doc-datos"></dl>
           <form class="form" id="form-corregir-documento">
             <h3>Corregir datos extraídos</h3>
