@@ -3364,7 +3364,7 @@
               body { display: grid; place-items: center; }
               img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
             `;
-            documento.head.replaceChildren(estilo);
+            documento.head.append(estilo); // conserva el título, que sale en el encabezado de la impresión
             marco.contentWindow.addEventListener('afterprint', () => {
               URL.revokeObjectURL(urlEscaneada);
               marco.remove();
